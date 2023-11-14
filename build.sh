@@ -11,7 +11,15 @@ if [ $1 = "build" ]; then
   CFLAGS="-Wall -Wextra -ggdb -I./raylib/src/"
   LIBS="-lm -ldl -lpthread -L./build/raylib/ -l:libraylib.a"
 
-  clang $CFLAGS -o ./build/NohBoard src/main.c $LIBS -v
+  clang $CFLAGS -o ./build/NohBoard src/main.c $LIBS 
+
+elif [ $1 = "noh" ]; then
+  # Build noh.h
+
+  CFLAGS="-Wall -Wextra -ggdb"
+  LIBS="-lm -ldl -lpthread"
+
+  clang $CFLAGS -o ./noh ./noh.c $LIBS
 
 elif [ $1 = "raylib" ]; then
   # Build Raylib
