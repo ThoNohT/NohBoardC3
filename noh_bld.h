@@ -2,8 +2,8 @@
 #define NOH_BLD_H_
 
 // Ensure that noh.h is available.
-#ifndef NOH_H_
-#error "Please include noh.h!"
+#ifndef NOH_IMPLEMENTATION
+#error "Please include noh.h with implementation!"
 #else
 
 // Defines a command that can be run.
@@ -22,6 +22,6 @@ noh_da_append_multiple(          \
 // Resets a command, freeing the memory used for its elements and setting the count and capacity to 0.
 #define noh_cmd_reset(cmd) noh_da_reset(cmd)
 
-#endif // NOH_H
+#endif // NOH_IMPLEMENTATION
 #endif // NOH_BLD_H
 
