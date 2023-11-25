@@ -12,6 +12,10 @@
 
 ///////////////////////// Core stuff /////////////////////////
 
+#define noh_array_len(array) (sizeof(array)/sizeof(array[0]))
+#define noh_array_get(array, index) \
+    (assert(index >= 0), assert(index < noh_array_get(array)), array[index])
+
 // Allows returning a file after performing some deferred code.
 // Usage:
 // Define a result variable before the first call of this macro.
@@ -19,11 +23,27 @@
 // Return result at the end of the deferred work.
 #define noh_return_defer(value) do { result = (value); goto defer; } while(0)
 
-#define NOH_DA_INIT_CAP 256
-
-void* noh_realloc_check_(void *target, size_t size);
 // Reallocates some memory and crashes if it failed.
 #define noh_realloc_check(target, size) noh_realloc_check_((void*)(target), (size))
+
+// Returns the next argument as a c-string, moves the argv pointer to the next argument and decreases argc.
+char *noh_shift_args(int *argc, char ***argv);
+
+///////////////////////// Logging /////////////////////////
+
+// Possible log levels.
+typedef enum {
+    NOH_INFO,
+    NOH_WARNING,
+    NOH_ERROR,
+} Noh_Log_Level;
+
+// Writes a formatted log message to stderr with the provided log level.
+void noh_log(Noh_Log_Level level, const char *fmt, ...);
+
+///////////////////////// Dynamic array /////////////////////////
+
+#define NOH_DA_INIT_CAP 256
 
 // Appends an element to a dynamic array, allocates more memory and moves all elements to newly allocated memory
 // if needed.
@@ -161,16 +181,58 @@ bool noh_sv_eq(Noh_String_View a, Noh_String_View b);
 // Creates a cstring in an arena from a string view.
 const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv);
 
+// printf macros for Noh_String_View
+#define Nsv_Fmt "%.*s"
+#define Nsv_Arg(sv) (int) (sv).count, (sv).data
+// USAGE:
+//   Noh_String_View name = ...;
+//   printf("Name: "Nsv_Fmt"\n", Nsv_Arg(name));
+
 #endif // NOH_H_
 
 #ifdef NOH_IMPLEMENTATION
 
-///////////////////////// Core /////////////////////////  
+///////////////////////// Core stuff /////////////////////////  
 
 void* noh_realloc_check_(void *target, size_t size) {
     target = realloc(target, size);
     assert(target != NULL && "Could not allocate enough memory");
     return target;
+}
+
+char *noh_shift_args(int *argc, char ***argv) {
+    assert(*argc > 0 && "No more arguments");
+
+    char *result = **argv;
+    (*argv)++;
+    (*argc)--;
+
+    return result;
+}
+
+///////////////////////// Logging /////////////////////////  
+
+void noh_log(Noh_Log_Level level, const char *fmt, ...)
+{
+    switch (level) {
+    case NOH_INFO:
+        fprintf(stderr, "[INFO] ");
+        break;
+    case NOH_WARNING:
+        fprintf(stderr, "[WARNING] ");
+        break;
+    case NOH_ERROR:
+        fprintf(stderr, "[ERROR] ");
+        break;
+    default:
+        assert(false && "Invalid log level");
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fprintf(stderr, "\n");
 }
 
 ///////////////////////// Arena /////////////////////////  

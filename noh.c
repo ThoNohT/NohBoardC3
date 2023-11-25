@@ -4,8 +4,16 @@
 #include "src/noh.h"
 #include "noh_bld.h"
 
-int main() {
+int main(int argc, char **argv) {
     Noh_Arena arena = noh_arena_init(4*1024);
+
+    while (argc > 0) {
+        char *arg = noh_shift_args(&argc, &argv);
+        noh_log(NOH_INFO, "%s", arg);
+    }
+
+    return 0;
+
 
     noh_arena_save(&arena);
     char *s1 = noh_arena_sprintf(&arena, "Hello, World!");
