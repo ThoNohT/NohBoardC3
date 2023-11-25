@@ -62,9 +62,17 @@ do {                     \
 
 ///////////////////////// Arena /////////////////////////  
 
+// Checkpoints in an arena.
+typedef struct {
+    size_t *elems;
+    size_t count;
+    size_t capacity;
+} Noh_Arena_Checkpoints;
+
 // An arena for storing temporary data.
 typedef struct {
     void* data;
+    Noh_Arena_Checkpoints checkpoints;
     size_t size;
     size_t capacity;
 } Noh_Arena;
@@ -82,10 +90,10 @@ void noh_arena_free(Noh_Arena *arena);
 void *noh_arena_alloc(Noh_Arena *arena, size_t size);
 
 // Saves the current size of the arena.
-size_t noh_arena_save(Noh_Arena arena);
+void noh_arena_save(Noh_Arena *arena);
 
-// Rewinds an arena to the specified size.
-void noh_arena_rewind(Noh_Arena *arena, size_t checkpoint);
+// Rewinds an arena to the last saved checkpoint.
+void noh_arena_rewind(Noh_Arena *arena);
 
 // Copies a c-string to the arena.
 char *noh_arena_strdup(Noh_Arena *arena, const char *cstr);
@@ -171,6 +179,8 @@ Noh_Arena noh_arena_init(size_t size) {
     Noh_Arena arena = {0};
 
     arena.data = noh_realloc_check(arena.data, size);
+    Noh_Arena_Checkpoints checkpoints = {0};
+    arena.checkpoints = checkpoints;
     arena.size = 0;
     arena.capacity = size;
 
@@ -179,10 +189,12 @@ Noh_Arena noh_arena_init(size_t size) {
 
 void noh_arena_reset(Noh_Arena *arena) {
     arena->size = 0;
+    arena->checkpoints.count = 0;
 }
 
 void noh_arena_free(Noh_Arena *arena) {
     free(arena->data);
+    noh_da_reset(&arena->checkpoints);
     arena->capacity = 0;
     arena->size = 0;
 }
@@ -209,12 +221,15 @@ void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
     return result;
 }
 
-size_t noh_arena_save(Noh_Arena arena) {
-    return arena.size;
+void noh_arena_save(Noh_Arena *arena) {
+    noh_da_append(&arena->checkpoints, arena->size);
 }
 
-void noh_arena_rewind(Noh_Arena *arena, size_t checkpoint) {
-    assert(checkpoint <= arena->size && "Rewind can only shrink an arena.");
+void noh_arena_rewind(Noh_Arena *arena) {
+    assert(arena->checkpoints.count > 0 && "No history to rewind");
+
+    size_t checkpoint = arena->checkpoints.elems[arena->checkpoints.count - 1];
+    arena->checkpoints.count -= 1;
     arena->size = checkpoint;
 }
 
