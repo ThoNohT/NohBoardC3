@@ -59,20 +59,20 @@ do {                                                                            
 
 // Appends multiple elements to a dynamic array. Allocates more memory and moves all elements to newly allocated memory
 // if needed.
-#define noh_da_append_multiple(da, new_elems, new_elems_count)                                   \
-do {                                                                                             \
-    if ((da)->count + new_elems_count > (da)->capacity) {                                        \
-        if ((da)->capacity == 0) (da)->capacity = NOH_DA_INIT_CAP;                               \
-        while ((da)->count + new_elems_count > (da)->capacity) (da)->capacity *= 2;              \
-        (da)->elems = noh_realloc_check((da)->elems, (da)->capacity * sizeof(*(da)->elems));     \
-    }                                                                                            \
-                                                                                                 \
-    memcpy((void*)(da)->elems + (da)->count, new_elems, new_elems_count * sizeof(*(da)->elems)); \
-    (da)->count += new_elems_count;                                                              \
+#define noh_da_append_multiple(da, new_elems, new_elems_count)                               \
+do {                                                                                         \
+    if ((da)->count + new_elems_count > (da)->capacity) {                                    \
+        if ((da)->capacity == 0) (da)->capacity = NOH_DA_INIT_CAP;                           \
+        while ((da)->count + new_elems_count > (da)->capacity) (da)->capacity *= 2;          \
+        (da)->elems = noh_realloc_check((da)->elems, (da)->capacity * sizeof(*(da)->elems)); \
+    }                                                                                        \
+                                                                                             \
+    memcpy((da)->elems + (da)->count, new_elems, new_elems_count * sizeof(*(da)->elems));    \
+    (da)->count += new_elems_count;                                                          \
 } while (0)
 
 // Frees the elements in a dynamic array, and resets the count and capacity.
-#define noh_da_reset(da) \
+#define noh_da_free(da) \
 do {                     \
     (da)->count = 0;     \
     (da)->capacity = 0;  \
@@ -137,7 +137,7 @@ void noh_string_append_cstr(Noh_String *string, const char *cstr);
 void noh_string_append_null(Noh_String *string);
 
 // Resets a Noh_String, freeing the memory used and settings the count and capacity to 0.
-#define noh_string_reset(string) noh_da_reset(string)
+#define noh_string_reset(string) noh_da_free(string)
 
 // Reads the contents of a file into a Noh_String.
 bool noh_string_read_file(Noh_String *string, const char *filename);
@@ -256,7 +256,7 @@ void noh_arena_reset(Noh_Arena *arena) {
 
 void noh_arena_free(Noh_Arena *arena) {
     free(arena->data);
-    noh_da_reset(&arena->checkpoints);
+    noh_da_free(&arena->checkpoints);
     arena->capacity = 0;
     arena->size = 0;
 }
