@@ -37,6 +37,9 @@ pid_t noh_cmd_run_async(Noh_Cmd cmd);
 // Runs a command synchronously.
 bool noh_cmd_run_sync(Noh_Cmd cmd);
 
+// Renders a textual representation of the command into the provided string.
+void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
+
 #endif // NOH_BLD_H
 
 #ifdef NOH_BLD_IMPLEMENTATION
@@ -75,11 +78,38 @@ bool noh_proc_wait(pid_t pid)
 
 ///////////////////////// Commands /////////////////////////
 
+// Adds a c string to a string, surrounding it with single quotes if it contains any spaces.
+void noh_quote_if_needed(const char *value, Noh_String *string) {
+    if (!strchr(value, ' ')) {
+        noh_string_append_cstr(string, value);
+    } else {
+        noh_da_append(string, '\'');
+        noh_string_append_cstr(string, value);
+        noh_da_append(string, '\'');
+    }
+}
+
+void noh_cmd_render(Noh_Cmd cmd, Noh_String *string) {
+    for (size_t i = 0; i < cmd.count; ++i) {
+        const char *arg = cmd.elems[i];
+        if (arg == NULL) break;
+        if (i > 0) noh_string_append_cstr(string, " ");
+        noh_quote_if_needed(arg, string);
+    }
+}
+
 pid_t noh_cmd_run_async(Noh_Cmd cmd) {
     if (cmd.count < 1) {
         noh_log(NOH_ERROR, "Cannot run an empty command.");
         return -1;
     }
+
+    // Log the command.
+    Noh_String sb = {0};
+    noh_cmd_render(cmd, &sb);
+    noh_da_append(&sb, '\0');
+    noh_log(NOH_INFO, "CMD: %s", sb.elems);
+    noh_da_free(&sb);
 
     pid_t cpid = fork();
     if (cpid < 0) {
