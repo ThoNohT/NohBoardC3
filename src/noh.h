@@ -82,6 +82,8 @@ do {                     \
 
 ///////////////////////// Arena /////////////////////////  
 
+#define NOH_ARENA_INIT_CAP 256
+
 // Checkpoints in an arena.
 typedef struct {
     size_t *elems;
@@ -137,7 +139,7 @@ void noh_string_append_cstr(Noh_String *string, const char *cstr);
 void noh_string_append_null(Noh_String *string);
 
 // Resets a Noh_String, freeing the memory used and settings the count and capacity to 0.
-#define noh_string_reset(string) noh_da_free(string)
+#define noh_string_free(string) noh_da_free(string)
 
 // Reads the contents of a file into a Noh_String.
 bool noh_string_read_file(Noh_String *string, const char *filename);
@@ -266,7 +268,7 @@ void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
 
     // If the new size would exceed the capacity, extend the arena size.
     if (new_size > arena->capacity) {
-        size_t new_cap = arena->capacity;
+        size_t new_cap = arena->capacity == 0 ? NOH_ARENA_INIT_CAP : arena->capacity * 2;
         // Double capacity until the new size fits.
         while (new_cap < new_size) new_cap *= 2;
 
