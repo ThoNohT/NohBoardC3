@@ -11,7 +11,21 @@
 
 ///////////////////////// Processes /////////////////////////
 
+// A collection of processes.
+typedef struct {
+    pid_t *elems;
+    size_t count;
+    size_t capacity;
+} Noh_Procs;
+
+// Waits for a single process.
 bool noh_proc_wait(pid_t pid);
+
+// Waits for a collection of processes.
+bool noh_procs_wait(Noh_Procs procs);
+
+// Frees the collection pocesses.
+#define noh_procs_free(procs) noh_da_free(procs);
 
 ///////////////////////// Commands /////////////////////////
 
@@ -74,6 +88,15 @@ bool noh_proc_wait(pid_t pid)
     }
 
     return true;
+}
+
+bool noh_procs_wait(Noh_Procs procs) {
+    bool success = true;
+    for (size_t i = 0; i < procs.count ; i++) {
+        success = noh_proc_wait(procs.elems[i]) && success;
+    }
+
+    return success;
 }
 
 ///////////////////////// Commands /////////////////////////

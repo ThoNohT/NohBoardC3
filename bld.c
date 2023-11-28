@@ -52,9 +52,10 @@ bool build_raylib() {
     if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
     cmd.count = 0;
 
+    // Compile individual libraries.
+    Noh_Procs procs = {0};
     char *files[] = { "raudio", "rcore", "rglfw", "rmodels", "rshapes", "rtext", "rtextures", "utils" };
 
-    // Compile individual libraries.
     Noh_Arena arena = {0};
     for (size_t i = 0; i < noh_array_len(files); i++) {
         noh_cmd_append(&cmd, "clang");
@@ -71,11 +72,14 @@ bool build_raylib() {
         char *output_path = noh_arena_sprintf(&arena, "build/raylib/%s.o", files[i]);
         noh_cmd_append(&cmd, "-o", output_path);
 
-        if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
-        cmd.count = 0;
+        pid_t pid = noh_cmd_run_async(cmd);
+        noh_da_append(&procs, pid);
 
+        cmd.count = 0;
         noh_arena_reset(&arena);
     }
+
+    if (!noh_procs_wait(procs)) noh_return_defer(false);
 
     // Combine libraries.
     noh_cmd_append(&cmd, "ar", "-crs", "build/raylib/libraylib.a");
@@ -90,6 +94,7 @@ bool build_raylib() {
 
 defer:
     noh_cmd_free(&cmd);
+    noh_procs_free(&procs);
     return result;
 }
 
