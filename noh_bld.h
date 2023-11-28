@@ -17,7 +17,7 @@ bool noh_proc_wait(pid_t pid);
 
 // Defines a command that can be run.
 typedef struct { 
-     const char* *elems;
+     const char **elems;
      size_t count;
      size_t capacity;
  } Noh_Cmd;
@@ -109,7 +109,7 @@ pid_t noh_cmd_run_async(Noh_Cmd cmd) {
     noh_cmd_render(cmd, &sb);
     noh_da_append(&sb, '\0');
     noh_log(NOH_INFO, "CMD: %s", sb.elems);
-    noh_da_free(&sb);
+    noh_string_free(&sb);
 
     pid_t cpid = fork();
     if (cpid < 0) {
