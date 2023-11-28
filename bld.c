@@ -36,23 +36,10 @@ defer:
 bool build_raylib() {
     bool result = true;
 
-    Noh_Cmd cmd = {0};
-
-    // TODO: Replace with code for creating directory.
-    // Recreate the raylib directory empty.
-    noh_cmd_append(&cmd, "mkdir", "-p","./build/raylib/");
-    if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
-    cmd.count = 0;
-
-    noh_cmd_append(&cmd, "rm", "-r","./build/raylib/");
-    if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
-    cmd.count = 0;
-
-    noh_cmd_append(&cmd, "mkdir", "-p","./build/raylib/");
-    if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
-    cmd.count = 0;
+    noh_mkdir_if_needed("./build/raylib/");
 
     // Compile individual libraries.
+    Noh_Cmd cmd = {0};
     Noh_Procs procs = {0};
     char *files[] = { "raudio", "rcore", "rglfw", "rmodels", "rshapes", "rtext", "rtextures", "utils" };
 
@@ -113,11 +100,23 @@ int main(int argc, char **argv) {
         command = noh_shift_args(&argc, &argv);
     }
 
+    // Ensure build directory exists.
+    if (!noh_mkdir_if_needed("./build")) return 1;
+
     if (strcmp(command, "build") == 0) {
         if (!build_nohboard()) return 1;
     } else if (strcmp(command, "raylib") == 0) {
         if (!build_raylib()) return 1;
     } else if (strcmp(command, "run") == 0) {
+        Noh_Cmd cmd = {0};
+        noh_cmd_append(&cmd, "./build/NohBoard");
+        if (!noh_cmd_run_sync(cmd)) return 1;
+        noh_cmd_free(&cmd);
+    } else if (strcmp(command, "clean") == 0) {
+        Noh_Cmd cmd = {0};
+        noh_cmd_append(&cmd, "rm", "-rf", "./build/");
+        if (!noh_cmd_run_sync(cmd)) return 1;
+        noh_cmd_free(&cmd);
     } else {
         noh_log(NOH_ERROR, "Invalid command: '%s'", command);
         print_usage(program);

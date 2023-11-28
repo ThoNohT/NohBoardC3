@@ -9,6 +9,7 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <sys/stat.h>
 
 ///////////////////////// Core stuff /////////////////////////
 
@@ -73,10 +74,10 @@ do {                                                                            
 
 // Frees the elements in a dynamic array, and resets the count and capacity.
 #define noh_da_free(da) \
-do {                     \
-    (da)->count = 0;     \
-    (da)->capacity = 0;  \
-    free((da)->elems);   \
+do {                    \
+    (da)->count = 0;    \
+    (da)->capacity = 0; \
+    free((da)->elems);  \
 } while (0)
 
 
@@ -189,6 +190,12 @@ const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv);
 // USAGE:
 //   Noh_String_View name = ...;
 //   printf("Name: "Nsv_Fmt"\n", Nsv_Arg(name));
+
+///////////////////////// Files and directories /////////////////////////
+
+// Creates the path at the specified directory if it does not exist.
+// Does not create any missing parent directories.
+bool noh_mkdir_if_needed(const char *path);
 
 #endif // NOH_H_
 
@@ -444,6 +451,25 @@ const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv)
     memcpy(result, sv.elems, sv.count);
     result[sv.count] = '\0';
     return result;
+}
+
+///////////////////////// Files and directories /////////////////////////
+
+bool noh_mkdir_if_needed(const char *path) {
+    int result = mkdir(path, 0755);
+
+    if (result == 0) {
+        noh_log(NOH_INFO, "Created directory '%s'", path);
+        return true;
+    }
+
+    if (errno == EEXIST) {
+        noh_log(NOH_INFO, "Directory '%s' already exists.", path);
+        return true;
+    }
+
+    noh_log(NOH_ERROR, "Could not create directory '%s': %s", path, strerror(errno));
+    return false;
 }
 
 #endif // NOH_IMPLEMENTATION
