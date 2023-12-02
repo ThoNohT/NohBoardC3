@@ -9,6 +9,7 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <sys/stat.h>
 
 ///////////////////////// Core stuff /////////////////////////
@@ -94,7 +95,7 @@ typedef struct {
 
 // An arena for storing temporary data.
 typedef struct {
-    void* data;
+    char* data;
     Noh_Arena_Checkpoints checkpoints;
     size_t size;
     size_t capacity;
@@ -203,6 +204,12 @@ typedef struct {
 // Creates the path at the specified directory if it does not exist.
 // Does not create any missing parent directories.
 bool noh_mkdir_if_needed(const char *path);
+
+// Renames a file.
+bool noh_rename(const char *path, const char *new_path);
+
+// Removes a file.
+bool noh_remove(const char *path);
 
 #endif // NOH_H_
 
@@ -466,7 +473,7 @@ bool noh_mkdir_if_needed(const char *path) {
     int result = mkdir(path, 0755);
 
     if (result == 0) {
-        noh_log(NOH_INFO, "Created directory '%s'", path);
+        noh_log(NOH_INFO, "Created directory '%s'.", path);
         return true;
     }
 
@@ -477,6 +484,27 @@ bool noh_mkdir_if_needed(const char *path) {
 
     noh_log(NOH_ERROR, "Could not create directory '%s': %s", path, strerror(errno));
     return false;
+}
+
+bool noh_rename(const char *path, const char *new_path)
+{
+    noh_log(NOH_INFO, "Renaming '%s' to '%s'.", path, new_path);
+    if (rename(path, new_path) < 0) {
+        noh_log(NOH_ERROR, "Rename failed: %s", strerror(errno));
+        return false;
+    }
+
+    return true;
+}
+
+bool noh_remove(const char *path) {
+    noh_log(NOH_INFO, "Removing '%s'.", path);
+    if (remove(path) < 0) { 
+        noh_log(NOH_ERROR, "Remove failed: %s", strerror(errno));
+        return false;
+    }
+
+    return true;
 }
 
 #endif // NOH_IMPLEMENTATION

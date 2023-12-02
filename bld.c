@@ -68,6 +68,7 @@ bool build_raylib() {
         updated = true;
 
         noh_cmd_append(&cmd, "clang");
+        noh_cmd_append(&cmd, "-Wno-everything"); // We don't care about warnings in the raylib source.
         noh_cmd_append(&cmd, "-ggdb", "-DPLATFORM_DESKTOP");
         noh_cmd_append(&cmd, "-I./raylib/src/external/glfw/include");
         noh_cmd_append(&cmd, "-c", source_path);
@@ -109,6 +110,7 @@ void print_usage(char *program) {
 }
 
 int main(int argc, char **argv) {
+    noh_rebuild_if_needed(argc, argv);
     char *program = noh_shift_args(&argc, &argv);
 
     // Determine command.

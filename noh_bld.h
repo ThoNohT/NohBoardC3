@@ -57,6 +57,41 @@ void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
 
 ///////////////////////// Building /////////////////////////
 
+// Call this macro at the start of a build script. It will check if the source file is newer than the executable
+// that is running, and if so, rebuild the source and call the new executable.
+#define noh_rebuild_if_needed(argc, argv)                                               \
+    do {                                                                                \
+        const char *source_path = __FILE__;                                             \
+        assert(argc >= 1);                                                              \
+        const char *binary_path = argv[0];                                              \
+                                                                                        \
+        int rebuild_needed = noh_output_is_older(binary_path, (char**)&source_path, 1); \
+        if (rebuild_needed < 0) exit(1);                                                \
+        if (rebuild_needed) {                                                           \
+            Noh_String backup_path = {0};                                               \
+            noh_string_append_cstr(&backup_path, binary_path);                          \
+            noh_string_append_cstr(&backup_path, ".old");                               \
+            noh_string_append_null(&backup_path);                                       \
+            if (!noh_rename(binary_path, backup_path.elems)) exit(1);                   \
+                                                                                        \
+            Noh_Cmd rebuild = {0};                                                      \
+            noh_cmd_append(&rebuild, "cc", "-o", binary_path, source_path);             \
+            bool rebuild_succeeded = noh_cmd_run_sync(rebuild);                         \
+            noh_cmd_free(&rebuild);                                                     \
+            if (!rebuild_succeeded) {                                                   \
+                noh_rename(backup_path.elems, binary_path);                             \
+                exit(1);                                                                \
+            }                                                                           \
+                                                                                        \
+            noh_remove(backup_path.elems);                                              \
+                                                                                        \
+            Noh_Cmd actual_run = {0};                                                   \
+            noh_da_append_multiple(&actual_run, argv, argc);                            \
+            if (!noh_cmd_run_sync(actual_run)) exit(1);                                 \
+            exit(0);                                                                    \
+        }                                                                               \
+    } while(0)
+
 // Indicates whether the file at the output is older than any of the files at the input paths.
 // 1 means it is older, 0 means it is not older, -1 means the check failed.
 int noh_output_is_older(const char *output_path, char **input_paths, size_t input_paths_count);
