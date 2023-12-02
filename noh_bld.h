@@ -8,6 +8,7 @@
 
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 
 ///////////////////////// Processes /////////////////////////
 
@@ -53,6 +54,12 @@ bool noh_cmd_run_sync(Noh_Cmd cmd);
 
 // Renders a textual representation of the command into the provided string.
 void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
+
+///////////////////////// Building /////////////////////////
+
+// Indicates whether the file at the output is older than any of the files at the input paths.
+// 1 means it is older, 0 means it is not older, -1 means the check failed.
+int noh_output_is_older(const char *output_path, char **input_paths, size_t input_paths_count);
 
 #endif // NOH_BLD_H
 
@@ -163,6 +170,33 @@ bool noh_cmd_run_sync(Noh_Cmd cmd) {
     if (pid == -1) return false;
 
     return noh_proc_wait(pid);
+}
+
+///////////////////////// Building /////////////////////////
+
+int noh_output_is_older(const char *output_path, char **input_paths, size_t input_paths_count) {
+    struct stat statbuf = {0};
+
+    if (stat(output_path, &statbuf) < 0) {
+        if (errno == ENOENT) return 1; // The output path doesn't exist, consider that older.
+        noh_log(NOH_ERROR, "Could not stat '%s': %s", output_path, strerror(errno));
+        return -1;
+    }
+
+    int output_time = statbuf.st_mtim.tv_sec;
+
+    for (size_t i = 0; i < input_paths_count; i++) {
+        if (stat(input_paths[i], &statbuf) < 0) {
+            // Non-existent input path means a source file does not exist, fail.
+            noh_log(NOH_ERROR, "Could not stat '%s': %s", input_paths[i], strerror(errno));
+            return -1;
+        }
+
+        // Any newer source file means the output is older.
+        if (statbuf.st_mtim.tv_sec > output_time) return 1;
+    }
+
+    return 0;
 }
 
 #endif // NOH_BLD_IMPLEMENTATION

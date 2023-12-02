@@ -8,7 +8,17 @@
 bool build_nohboard() {
     bool result = true;
 
-    Noh_Cmd cmd ={0};
+    Noh_Cmd cmd = {0};
+    Noh_File_Paths input_paths = {0};
+    noh_da_append(&input_paths, "./src/main.c");
+    noh_da_append(&input_paths, "./build/raylib/libraylib.a");
+
+    int needs_rebuild = noh_output_is_older("./build/NohBoard", input_paths.elems, input_paths.count);
+    if (needs_rebuild < 0) noh_return_defer(false);
+    if (needs_rebuild == 0) {
+        noh_log(NOH_INFO, "NohBoard is up to date.");
+        noh_return_defer(true);
+    }
 
     noh_cmd_append(&cmd, "clang");
 
@@ -30,6 +40,7 @@ bool build_nohboard() {
 
 defer:
     noh_cmd_free(&cmd);
+    noh_da_free(&input_paths);
     return result;
 }
 
@@ -40,23 +51,26 @@ bool build_raylib() {
 
     // Compile individual libraries.
     Noh_Cmd cmd = {0};
+
     Noh_Procs procs = {0};
     char *files[] = { "raudio", "rcore", "rglfw", "rmodels", "rshapes", "rtext", "rtextures", "utils" };
 
+    bool updated = false;
     Noh_Arena arena = {0};
     for (size_t i = 0; i < noh_array_len(files); i++) {
-        noh_cmd_append(&cmd, "clang");
+        char *source_path = noh_arena_sprintf(&arena, "./raylib/src/%s.c", files[i]);
+        char *output_path = noh_arena_sprintf(&arena, "./build/raylib/%s.o", files[i]);
 
-        // c-flags
+        int needs_rebuild = noh_output_is_older(output_path, &source_path, 1);
+        if (needs_rebuild < 0) noh_return_defer(false);
+        if (needs_rebuild == 0) continue;
+
+        updated = true;
+
+        noh_cmd_append(&cmd, "clang");
         noh_cmd_append(&cmd, "-ggdb", "-DPLATFORM_DESKTOP");
         noh_cmd_append(&cmd, "-I./raylib/src/external/glfw/include");
-
-        // Source
-        char *source_path = noh_arena_sprintf(&arena, "./raylib/src/%s.c", files[i]);
         noh_cmd_append(&cmd, "-c", source_path);
-
-        // output
-        char *output_path = noh_arena_sprintf(&arena, "build/raylib/%s.o", files[i]);
         noh_cmd_append(&cmd, "-o", output_path);
 
         pid_t pid = noh_cmd_run_async(cmd);
@@ -68,10 +82,15 @@ bool build_raylib() {
 
     if (!noh_procs_wait(procs)) noh_return_defer(false);
 
-    // Combine libraries.
-    noh_cmd_append(&cmd, "ar", "-crs", "build/raylib/libraylib.a");
+    // Combine libraries if any was updated.
+    if (!updated) {
+        noh_log(NOH_INFO, "Raylib is up to date.");
+        noh_return_defer(true);
+    }
+
+    noh_cmd_append(&cmd, "ar", "-crs", "./build/raylib/libraylib.a");
     for (size_t i = 0; i < noh_array_len(files); i++) {
-        char *input_path = noh_arena_sprintf(&arena, "build/raylib/%s.o", files[i]);
+        char *input_path = noh_arena_sprintf(&arena, "./build/raylib/%s.o", files[i]);
         noh_cmd_append(&cmd, input_path);
     }
     if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
@@ -104,9 +123,8 @@ int main(int argc, char **argv) {
     if (!noh_mkdir_if_needed("./build")) return 1;
 
     if (strcmp(command, "build") == 0) {
-        if (!build_nohboard()) return 1;
-    } else if (strcmp(command, "raylib") == 0) {
         if (!build_raylib()) return 1;
+        if (!build_nohboard()) return 1;
     } else if (strcmp(command, "run") == 0) {
         Noh_Cmd cmd = {0};
         noh_cmd_append(&cmd, "./build/NohBoard");

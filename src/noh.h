@@ -193,6 +193,13 @@ const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv);
 
 ///////////////////////// Files and directories /////////////////////////
 
+// File paths.
+typedef struct {
+    char **elems;
+    size_t count;
+    size_t capacity;
+} Noh_File_Paths;
+
 // Creates the path at the specified directory if it does not exist.
 // Does not create any missing parent directories.
 bool noh_mkdir_if_needed(const char *path);
