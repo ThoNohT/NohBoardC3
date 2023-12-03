@@ -108,7 +108,11 @@ defer:
 }
 
 void print_usage(char *program) {
-    noh_log(NOH_INFO, "Usage: %s", program);
+    noh_log(NOH_INFO, "Usage: %s <command>", program);
+    noh_log(NOH_INFO, "Available commands:");
+    noh_log(NOH_INFO, "- build: build NohBoard (default).");
+    noh_log(NOH_INFO, "- run: build and run NohBoard.");
+    noh_log(NOH_INFO, "- clean: clean all build artifacts.");
 }
 
 int main(int argc, char **argv) {
@@ -127,20 +131,30 @@ int main(int argc, char **argv) {
     if (!noh_mkdir_if_needed("./build")) return 1;
 
     if (strcmp(command, "build") == 0) {
+        // Only build.
         if (!build_raylib()) return 1;
         if (!build_nohboard()) return 1;
+
     } else if (strcmp(command, "run") == 0) {
+        // Build and run.
+        if (!build_raylib()) return 1;
+        if (!build_nohboard()) return 1;
+
         Noh_Cmd cmd = {0};
         noh_cmd_append(&cmd, "./build/NohBoard");
         if (!noh_cmd_run_sync(cmd)) return 1;
         noh_cmd_free(&cmd);
+
     } else if (strcmp(command, "clean") == 0) {
         Noh_Cmd cmd = {0};
         noh_cmd_append(&cmd, "rm", "-rf", "./build/");
         if (!noh_cmd_run_sync(cmd)) return 1;
         noh_cmd_free(&cmd);
+
     } else {
-        noh_log(NOH_ERROR, "Invalid command: '%s'", command);
         print_usage(program);
+        noh_log(NOH_ERROR, "Invalid command: '%s'", command);
+        return 1;
+
     }
 } 
