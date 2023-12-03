@@ -1,6 +1,7 @@
 #ifndef NOH_H_
 #define NOH_H_
 
+#include <stdio.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>

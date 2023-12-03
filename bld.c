@@ -1,5 +1,3 @@
-#include <stdio.h>
-
 #define NOH_IMPLEMENTATION
 #include "src/noh.h"
 #define NOH_BLD_IMPLEMENTATION
@@ -10,7 +8,10 @@ bool build_nohboard() {
 
     Noh_Cmd cmd = {0};
     Noh_File_Paths input_paths = {0};
+    noh_da_append(&input_paths, "./src/noh.h");
     noh_da_append(&input_paths, "./src/main.c");
+    noh_da_append(&input_paths, "./src/hooks_linux.c");
+    noh_da_append(&input_paths, "./src/hooks.h");
     noh_da_append(&input_paths, "./build/raylib/libraylib.a");
 
     int needs_rebuild = noh_output_is_older("./build/NohBoard", input_paths.elems, input_paths.count);
@@ -31,6 +32,7 @@ bool build_nohboard() {
 
     // Source
     noh_cmd_append(&cmd, "src/main.c");
+    noh_cmd_append(&cmd, "src/hooks_linux.c");
 
     // Linker
     noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread");
