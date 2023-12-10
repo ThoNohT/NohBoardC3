@@ -35,7 +35,7 @@ bool build_nohboard() {
     noh_cmd_append(&cmd, "src/hooks_linux.c");
 
     // Linker
-    noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread");
+    noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread", "-lrt");
     noh_cmd_append(&cmd, "-L./build/raylib", "-l:libraylib.a");
 
     if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
@@ -99,9 +99,8 @@ bool build_raylib() {
     if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
     cmd.count = 0;
 
-    noh_arena_reset(&arena);
-
 defer:
+    noh_arena_free(&arena);
     noh_cmd_free(&cmd);
     noh_procs_free(&procs);
     return result;

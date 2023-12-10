@@ -13,6 +13,28 @@
 #include <stdarg.h>
 #include <sys/stat.h>
 
+///////////////////////// Number definitions /////////////////////////
+
+#ifndef int16
+#define int16 short
+#endif
+
+#ifndef uint16
+#define uint16 unsigned short
+#endif
+
+#ifndef uint
+#define uint unsigned int
+#endif
+
+#ifndef int64
+#define int64 long
+#endif
+
+#ifndef uint64
+#define uint64 unsigned long
+#endif
+
 ///////////////////////// Core stuff /////////////////////////
 
 #define noh_array_len(array) (sizeof(array)/sizeof(array[0]))
@@ -25,6 +47,8 @@
 // Place a defer label at the end of the function where the work is done.
 // Return result at the end of the deferred work.
 #define noh_return_defer(value) do { result = (value); goto defer; } while(0)
+
+void* noh_realloc_check_(void *target, size_t size);
 
 // Reallocates some memory and crashes if it failed.
 #define noh_realloc_check(target, size) noh_realloc_check_((void*)(target), (size))
@@ -72,6 +96,20 @@ do {                                                                            
                                                                                              \
     memcpy((da)->elems + (da)->count, new_elems, new_elems_count * sizeof(*(da)->elems));    \
     (da)->count += new_elems_count;                                                          \
+} while (0)
+
+// Removes the element at the specified location.
+#define noh_da_remove_at(da, index)                                          \
+do {                                                                         \
+    assert((index) < (da)->count && (index) >= 0 && "Index out of bounds."); \
+    (da)->count -= 1;                                                        \
+    if ((index) < (da)->count) {                                             \
+        size_t elem_size = sizeof(*(da)->elems);                             \
+        memmove(                                                             \
+            (void*)(da)->elems + (index) * elem_size,                        \
+            (void*)(da)->elems + ((index) + 1) * elem_size,                  \
+            ((da)->count - (index)) * elem_size);                            \
+    }                                                                        \
 } while (0)
 
 // Frees the elements in a dynamic array, and resets the count and capacity.

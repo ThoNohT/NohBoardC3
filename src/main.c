@@ -4,6 +4,10 @@
 #include <math.h>
 #include <assert.h>
 
+#define NOH_IMPLEMENTATION
+#include "noh.h"
+#include "hooks.h"
+
 void calculate_speed(bool is_accellerating, unsigned int *speed) {
     if (is_accellerating) {
         *speed += 2;
@@ -38,6 +42,11 @@ int main(void)
 {
     const int screenWidth = 800;
     const int screenHeight = 600;
+
+    //char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
+    const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
+    const char *mouse_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-mouse";
+    hooks_initialize(kb_path, mouse_path);
 
     InitWindow(screenWidth, screenHeight, "Speedometer test");
 
@@ -111,6 +120,8 @@ int main(void)
 
         EndDrawing();
     }
+
+    hooks_shutdown();
 
     CloseWindow();
 
