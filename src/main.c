@@ -43,8 +43,8 @@ int main(void)
     const int screenWidth = 800;
     const int screenHeight = 600;
 
-    //char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
-    const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
+    const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
+    //const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
     const char *mouse_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-mouse";
     hooks_initialize(kb_path, mouse_path);
 
@@ -53,10 +53,30 @@ int main(void)
     unsigned int speed = 0;
     Font font = GetFontDefault();
 
+    Noh_Arena arena = {0};
+    Noh_String str = {0};
+
     SetTargetFPS(60);
     while (!WindowShouldClose())
     {
-        calculate_speed(IsKeyDown(KEY_A), &speed);
+        noh_arena_save(&arena);
+        uint16 *pressed_keys = NULL;
+        size_t num_pressed_keys = hooks_get_pressed_kb_keys(&arena, &pressed_keys);
+        bool any_pressed = num_pressed_keys > 0;
+        calculate_speed(any_pressed, &speed);
+
+        if (any_pressed) {
+            noh_string_append_cstr(&str, "- ");
+            for (size_t i = 0; i < num_pressed_keys; i++) {
+                char *line = noh_arena_sprintf(&arena, "%u - ", pressed_keys[i]);
+                noh_string_append_cstr(&str, line);
+            }
+            noh_string_append_null(&str);
+            noh_log(NOH_INFO, str.elems);
+            noh_string_reset(&str);
+        }
+
+        noh_arena_rewind(&arena);
 
         BeginDrawing();
 
@@ -120,6 +140,9 @@ int main(void)
 
         EndDrawing();
     }
+
+    noh_arena_free(&arena);
+    noh_string_free(&str);
 
     hooks_shutdown();
 

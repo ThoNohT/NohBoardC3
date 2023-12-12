@@ -30,10 +30,10 @@ typedef struct {
     size_t capacity;
 } Pressed_Keys;
 
-pthread_mutex_t pressed_kb_keys_mutex = PTHREAD_MUTEX_INITIALIZER;
 Pressed_Keys pressed_kb_keys = {0};
-pthread_mutex_t pressed_mouse_keys_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t pressed_kb_keys_mutex = PTHREAD_MUTEX_INITIALIZER;
 Pressed_Keys pressed_mouse_keys = {0};
+pthread_mutex_t pressed_mouse_keys_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static struct timespec get_delay(int seconds) {
     struct timespec timeout;
@@ -64,10 +64,7 @@ static void *run() {
                 }
 
                 // If it is not in the map, add it.
-                if (!in_map) {
-                    noh_da_append(&pressed_kb_keys, event.code);
-                    noh_log(NOH_INFO, "DOWN: %u", event.code);
-                }   
+                if (!in_map) noh_da_append(&pressed_kb_keys, event.code);
 
                 pthread_mutex_unlock(&pressed_kb_keys_mutex);
             } else if (event.value == 0) {
@@ -80,10 +77,7 @@ static void *run() {
                 }
 
                 // If it is in the map, remove it.
-                if (in_map >= 0) {
-                    noh_da_remove_at(&pressed_kb_keys, (size_t)in_map);
-                    noh_log(NOH_INFO, "UP: %u", event.code);
-                }   
+                if (in_map >= 0) noh_da_remove_at(&pressed_kb_keys, (size_t)in_map);
 
                 pthread_mutex_unlock(&pressed_kb_keys_mutex);
 
@@ -142,4 +136,30 @@ void hooks_initialize(const char *kb_path, const char *mouse_path) {
     pthread_create(&run_thread, NULL, run, NULL);
     sem_init(&cleanup_sem, 0, 0);
     pthread_create(&cleanup_thread, NULL, cleanup, NULL);
+}
+
+size_t hooks_get_pressed_kb_keys(Noh_Arena *arena, uint16 **keys) {
+    pthread_mutex_lock(&pressed_kb_keys_mutex);
+    size_t count = pressed_kb_keys.count;
+
+    size_t size = sizeof(uint16) * count;
+    *keys = noh_arena_alloc(arena, size);
+    memcpy(*keys, pressed_kb_keys.elems, size);
+
+    pthread_mutex_unlock(&pressed_kb_keys_mutex);
+
+    return count;
+}
+
+size_t hooks_get_pressed_mouse_keys(Noh_Arena *arena, uint16 **keys) {
+    pthread_mutex_lock(&pressed_mouse_keys_mutex);
+    size_t count = pressed_mouse_keys.count;
+
+    size_t size = sizeof(uint16) * count;
+    *keys = noh_arena_alloc(arena, size);
+    memcpy(*keys, pressed_mouse_keys.elems, size);
+
+    pthread_mutex_unlock(&pressed_mouse_keys_mutex);
+
+    return count;
 }

@@ -28,6 +28,9 @@ bool noh_procs_wait(Noh_Procs procs);
 // Frees the collection pocesses.
 #define noh_procs_free(procs) noh_da_free(procs);
 
+// Resets the collection of processes.
+#define noh_procs_reset(procs) noh_da_reset(procs);
+
 ///////////////////////// Commands /////////////////////////
 
 // Defines a command that can be run.
@@ -43,8 +46,11 @@ noh_da_append_multiple(          \
     cmd,                         \
     ((const char*[]){__VA_ARGS__}), (sizeof((const char*[]){__VA_ARGS__}) / sizeof(const char*)))
 
-// Resets a command, freeing the memory used for its elements and setting the count and capacity to 0.
+// Frees a command, freeing the memory used for its elements and setting the count and capacity to 0.
 #define noh_cmd_free(cmd) noh_da_free(cmd)
+
+// Resets a command, setting the count to 0.
+#define noh_cmd_reset(cmd) noh_da_reset(cmd)
 
 // Runs a command asynchronously and returns the process id.
 pid_t noh_cmd_run_async(Noh_Cmd cmd);

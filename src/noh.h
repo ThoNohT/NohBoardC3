@@ -120,6 +120,11 @@ do {                    \
     free((da)->elems);  \
 } while (0)
 
+// Resets the count of a dynamic array to 0.
+#define noh_da_reset(da) \
+do {                    \
+    (da)->count = 0;    \
+} while (0)
 
 ///////////////////////// Arena /////////////////////////  
 
@@ -179,8 +184,11 @@ void noh_string_append_cstr(Noh_String *string, const char *cstr);
 // Appends null into a Noh_String.
 void noh_string_append_null(Noh_String *string);
 
-// Resets a Noh_String, freeing the memory used and settings the count and capacity to 0.
+// Frees a Noh_String, freeing the memory used and settings the count and capacity to 0.
 #define noh_string_free(string) noh_da_free(string)
+
+// Resets a Noh_String, setting the count to 0.
+#define noh_string_reset(string) noh_da_reset(string)
 
 // Reads the contents of a file into a Noh_String.
 bool noh_string_read_file(Noh_String *string, const char *filename);
