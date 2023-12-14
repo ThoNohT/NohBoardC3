@@ -3,6 +3,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <linux/input.h>
+#include <linux/input-event-codes.h>
 
 #include "noh.h"
 
@@ -118,6 +119,21 @@ static void* cleanup() {
     pthread_exit(NULL);
 }
 
+static size_t load_keymap(Noh_Arena *arena, const char *path, uint8 **keys) {
+    static size_t len = (KEY_MAX / 8 + 1) * sizeof(uint8);
+
+    // Allocate some zeroed memory.
+    *keys = noh_arena_alloc(arena, len);
+    memset(*keys, 0, len);
+
+    // Load the keymap from the input file.
+    FILE *fd = fopen(path, "r");
+    ioctl(fileno(fd), EVIOCGKEY(len), *keys);
+
+    // Return the length;
+    return len;
+}
+
 void hooks_shutdown() {
     running = false;
     sem_post(&cleanup_sem);
@@ -125,11 +141,28 @@ void hooks_shutdown() {
     pthread_join(run_thread, NULL);
 }
 
-void hooks_initialize(const char *kb_path, const char *mouse_path) {
+static bool test_bit(uint8 *keymap, size_t keymap_len, uint16 key) {
+    if (key / 8 > keymap_len) return false;
+
+    uint8 index = key / 8;
+    uint8 offset = key % 8;
+    return (keymap[index] & (1 << offset)) > 0;
+}
+
+void hooks_initialize(Noh_Arena *arena, const char *kb_path, const char *mouse_path) {
     noh_log(NOH_INFO, "Initializing hooks.");
-    noh_log(NOH_INFO, "KB_PATH: %s", hl_kb_path);
+    noh_log(NOH_INFO, "KB_PATH: %s", kb_path);
     hl_kb_path = kb_path;
     hl_mouse_path = mouse_path;
+
+    // Fill in the keys that are pressed when starting.
+    uint8 *pressed_at_start;
+    size_t keymap_len = load_keymap(arena, kb_path, &pressed_at_start);
+    for (uint16 key = 1; key < KEY_MAX; key++) {
+        if (test_bit(pressed_at_start, keymap_len, key)) {
+            noh_da_append(&pressed_kb_keys, key);
+        }
+    }
 
     running = true;
 

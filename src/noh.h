@@ -15,6 +15,14 @@
 
 ///////////////////////// Number definitions /////////////////////////
 
+#ifndef int8
+#define int8 signed char
+#endif
+
+#ifndef uint8
+#define uint8 unsigned char
+#endif
+
 #ifndef int16
 #define int16 short
 #endif

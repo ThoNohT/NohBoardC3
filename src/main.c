@@ -40,20 +40,24 @@ float calculate_angle(unsigned int speed, float deadzone, unsigned int minSpeed,
 
 int main(void)
 {
+    Noh_Arena arena = {0};
+
     const int screenWidth = 800;
     const int screenHeight = 600;
 
     const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
     //const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
     const char *mouse_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-mouse";
-    hooks_initialize(kb_path, mouse_path);
+
+    noh_arena_save(&arena);
+    hooks_initialize(&arena, kb_path, mouse_path);
+    noh_arena_rewind(&arena);
 
     InitWindow(screenWidth, screenHeight, "Speedometer test");
 
     unsigned int speed = 0;
     Font font = GetFontDefault();
 
-    Noh_Arena arena = {0};
     Noh_String str = {0};
 
     SetTargetFPS(60);
