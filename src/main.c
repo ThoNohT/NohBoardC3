@@ -6,9 +6,9 @@
 #include "noh.h"
 #include "hooks.h"
 
-void calculate_speed(bool is_accellerating, unsigned int *speed) {
-    if (is_accellerating) {
-        *speed += 2;
+void calculate_speed(int is_accellerating, float *speed) {
+    if (is_accellerating > 0) {
+        *speed += .25 * is_accellerating;
         if (*speed > 201) *speed = 201;
     } else {
         if (*speed > 0) *speed -= 1;
@@ -16,7 +16,7 @@ void calculate_speed(bool is_accellerating, unsigned int *speed) {
     }
 }
 
-float calculate_angle(unsigned int speed, float deadzone, unsigned int minSpeed, unsigned int maxSpeed, unsigned int doubleAt) {
+float calculate_angle(float speed, float deadzone, float minSpeed, float maxSpeed, float doubleAt) {
     assert(minSpeed <= doubleAt && "doubleAt must not be lower than minSpeed.");
     assert(doubleAt <= maxSpeed && "maxSpeed must not be lower than doubleAt.");
 
@@ -27,7 +27,7 @@ float calculate_angle(unsigned int speed, float deadzone, unsigned int minSpeed,
     double doubleRange = (maxSpeed - doubleAt) / 2;
     double totalRange = singleRange + doubleRange;
 
-    unsigned int x = speed - minSpeed;
+    float x = speed - minSpeed;
     doubleAt = doubleAt - minSpeed;
     float speedAngle = (x <= doubleAt)
         ? (x / totalRange) * totalRadians
@@ -53,7 +53,7 @@ int main(void)
 
     InitWindow(screenWidth, screenHeight, "Speedometer test");
 
-    unsigned int speed = 0;
+    float speed = 0;
     Font font = GetFontDefault();
 
     Noh_String str = {0};
@@ -65,7 +65,7 @@ int main(void)
         uint16 *pressed_keys = NULL;
         size_t num_pressed_keys = hooks_get_pressed_kb_keys(&arena, &pressed_keys);
         bool any_pressed = num_pressed_keys > 0;
-        calculate_speed(any_pressed, &speed);
+        calculate_speed(num_pressed_keys, &speed);
 
         if (any_pressed) {
             noh_string_append_cstr(&str, "- ");
@@ -89,9 +89,9 @@ int main(void)
 
         // Speedometer.
         int radius = 200;
-        unsigned int minSpeed = 0;
-        unsigned int maxSpeed = 240;
-        unsigned int doubleAt = 60;
+        float minSpeed = 0;
+        float maxSpeed = 240;
+        float doubleAt = 60;
 
         int cx = screenWidth / 2;
         int cy = screenHeight / 2;
