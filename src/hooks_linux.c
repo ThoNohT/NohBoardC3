@@ -4,12 +4,14 @@
 #include <pthread.h>
 #include <linux/input.h>
 #include <linux/input-event-codes.h>
+#include <fcntl.h>
+#include <poll.h>
 
 #include "noh.h"
 
 static bool running = false;
-static const char *hl_kb_path = NULL;
-static const char *hl_mouse_path = NULL;
+static const char *kb_path = NULL;
+static const char *mouse_path = NULL;
 
 static sem_t cleanup_sem;
 static pthread_t cleanup_thread;
@@ -47,13 +49,33 @@ static struct timespec get_delay(int seconds) {
     return timeout;
 }
 
+static bool test_bit(uint8 *keymap, size_t keymap_len, uint16 key) {
+    if (key / 8 > keymap_len) return false;
+
+    uint8 index = key / 8;
+    uint8 offset = key % 8;
+    return (keymap[index] & (1 << offset)) > 0;
+}
+
 static void *run() {
-    FILE *fd = fopen(hl_kb_path, "rb");
+    int fd = open(kb_path, O_RDONLY);
+    struct pollfd poll_fd = { .fd = fd, .events = POLLIN };
 
     Input_Event event = {0};
     while (running) {
-        size_t read = fread(&event, sizeof(event), 1, fd);
-        if (read == 1) {
+        int poll_result = poll(&poll_fd, 1, 500);
+        if (poll_result == -1) {
+            noh_log(NOH_ERROR, "Failed to poll keyboard file '%s': %s", kb_path, strerror(errno));
+            goto defer;
+        }
+
+        // 0 result means a timeout, so check if we should still be running.
+        if (poll_result == 0) continue;
+
+        // Otherwise, there is something to be read.
+        ssize_t bytes_read = read(fd, &event, sizeof(event));
+
+        if (bytes_read == sizeof(event)) {
             if (event.type != EV_KEY) continue;
             if (event.value == 1) {
                 pthread_mutex_lock(&pressed_kb_keys_mutex);
@@ -88,9 +110,10 @@ static void *run() {
         }
     }
 
+defer:
     noh_log(NOH_INFO, "Run shutdown.");
 
-    if (fclose(fd) != 0) {
+    if (close(fd) != 0) {
         noh_log(NOH_ERROR, "Failed closing keyboard file: %s", strerror(errno));
     }
 
@@ -100,8 +123,6 @@ static void *run() {
 static void* cleanup() {
     while (running) {
         struct timespec timeout = get_delay(2);
-
-        noh_log(NOH_INFO, "In cleanup thread...");
 
         // Wait for next run, or stop if signalled earlier.
         int res = sem_timedwait(&cleanup_sem, &timeout);
@@ -141,19 +162,11 @@ void hooks_shutdown() {
     pthread_join(run_thread, NULL);
 }
 
-static bool test_bit(uint8 *keymap, size_t keymap_len, uint16 key) {
-    if (key / 8 > keymap_len) return false;
-
-    uint8 index = key / 8;
-    uint8 offset = key % 8;
-    return (keymap[index] & (1 << offset)) > 0;
-}
-
-void hooks_initialize(Noh_Arena *arena, const char *kb_path, const char *mouse_path) {
+void hooks_initialize(Noh_Arena *arena, const char *kb_path_, const char *mouse_path_) {
     noh_log(NOH_INFO, "Initializing hooks.");
     noh_log(NOH_INFO, "KB_PATH: %s", kb_path);
-    hl_kb_path = kb_path;
-    hl_mouse_path = mouse_path;
+    kb_path = kb_path_;
+    mouse_path = mouse_path_;
 
     // Fill in the keys that are pressed when starting.
     uint8 *pressed_at_start;
