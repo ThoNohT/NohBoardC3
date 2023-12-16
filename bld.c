@@ -3,7 +3,7 @@
 #define NOH_BLD_IMPLEMENTATION
 #include "noh_bld.h"
 
-#define RAYLIB_PATH "./raylib-4.5.0"
+#define RAYLIB_PATH "./raylib-5.0"
 
 bool build_nohboard() {
     bool result = true;
