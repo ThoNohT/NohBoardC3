@@ -80,22 +80,8 @@ int main(void)
 
     SetTraceLogLevel(LOG_WARNING); 
     InitWindow(state.screen_size.x, state.screen_size.y, "NohBoard");
+    SetWindowMonitor(GetCurrentMonitor()); // Not sure why Raylib initializes the window on a not current monitor.
 
-    int count = GetMonitorCount();
-    noh_log(NOH_INFO, "%i monitors...", count);
-    int current = GetCurrentMonitor();
-    for (int i = 0; i < count; i++) {
-        const char *name = GetMonitorName(i);
-        int width = GetMonitorWidth(i);
-        int height = GetMonitorHeight(i);
-        if (current == i) {
-            noh_log(NOH_INFO, "Monitor %i (current): [%ix%i] %s", i, width, height, name);
-        } else {
-            noh_log(NOH_INFO, "Monitor %i: [%ix%i] %s", i, width, height, name);
-        }
-    }
-
-    //SetWindowPosition(width, 0);
     nb_font = LoadFontEx("./assets/Roboto-Regular.ttf", 120, 0, 0);
     SetExitKey(0);
 
