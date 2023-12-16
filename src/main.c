@@ -12,18 +12,84 @@
 typedef enum {
     NB_ShowKeyboard,
     NB_MainMenu
-} NohBoard_View;
+} NB_View;
 
 typedef struct {
     Vector2 screen_size;
+    NB_View view;
+    bool running;
+} NB_State;
 
-    NohBoard_View view;
-} NohBoard_State;
+typedef enum {
+    NB_Align_Left,
+    NB_Align_Center,
+    NB_Align_Right
+} NB_Align;
 
 // The default font to use for menus.
 Font nb_font;
 
-void showKeyboard(Noh_Arena *arena, NohBoard_State *state, uint16 **pressed_keys, size_t num_pressed_keys) {
+#define CONTROL_COLOR CLITERAL(Color){ 58, 60, 74, 255 }
+#define CONTROL_COLOR_HL CLITERAL(Color){ 86, 90, 100, 255 }
+#define CONTROL_EDGE_COLOR CLITERAL(Color){ 116, 120, 133, 255 }
+#define CONTROL_FG_COLOR CLITERAL(Color) { 192, 192, 213, 255 }
+
+Rectangle rec_from_vec2s(Vector2 position, Vector2 size) {
+    Rectangle rec = { .x = position.x, .y = position.y, .width = size.x, .height = size.y };
+    return rec;
+}
+
+// Calculates the position and font size needed to render text inside certain bounds designated by a position and size.
+// The provided font size is taken to be the maximum font size. If needed, it will be reduced, but never increased.
+// The provided position should point to the top left center of the rectangle into which to render the text. It will
+// be updated to the position at which the text should be rendered to fit into the bounds with the specified alignment.
+void calculate_text_bounds(char *text, Font font, float *font_size, NB_Align align, Vector2 *position, Vector2 size) {
+    Vector2 text_size = MeasureTextEx(nb_font, text, *font_size, 0);
+
+    // Determine the needed font size to ensure the text is smaller than size.
+    Vector2 factor = Vector2Divide(size, text_size);
+    float scale_factor = fminf(factor.x, factor.y);
+    if (scale_factor < 1) {
+        *font_size *= scale_factor;
+    }
+
+    text_size = MeasureTextEx(font, text, *font_size, 0);
+
+    position->y += size.y / 2.;
+    position->y -= text_size.y / 2.;
+    switch (align) {
+        case NB_Align_Left:
+            // Text is already horizontally aligned.
+            break;
+
+        case NB_Align_Center:
+            position->x += size.x / 2;
+            position->x -= text_size.x / 2;
+            break;
+
+        case NB_Align_Right:
+            position->x += size.x;
+            position->x -= text_size.x;
+        break;
+    }
+}
+
+bool render_button(char *text, Vector2 position, Vector2 size) {
+    Rectangle rec = rec_from_vec2s(position, size);
+    bool hover = CheckCollisionPointRec(GetMousePosition(), rec);
+    Color bg_color = CONTROL_COLOR;
+    if (hover) bg_color = CONTROL_COLOR_HL;
+    DrawRectangleRounded(rec, 0.1, 2, bg_color);
+    DrawRectangleRoundedLines(rec, 0.1, 2, 2, CONTROL_EDGE_COLOR);
+
+    float font_size = 32;
+    calculate_text_bounds(text, nb_font, &font_size, NB_Align_Center, &position, size);
+    DrawTextEx(nb_font, text, position, font_size, 0, CONTROL_FG_COLOR);
+
+    return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+}
+
+void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, size_t num_pressed_keys) {
     if (IsKeyPressed(KEY_SCROLL_LOCK)) {
         state->view = NB_MainMenu;
         return;
@@ -38,18 +104,13 @@ void showKeyboard(Noh_Arena *arena, NohBoard_State *state, uint16 **pressed_keys
         noh_arena_save(arena);
         char *keyStr = noh_arena_sprintf(arena, "%hu", key);
 
-        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, keyStr, 120, 0), 0.5);
-        Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, 0.5), text_offset);
+        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, keyStr, 120, 0), .5);
+        Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, .5), text_offset);
         DrawTextEx(nb_font, keyStr, pos, 120, 0, WHITE);
     }
-
-    Vector2 pos = { .x = 0, .y = 0 };
-    DrawTextEx(nb_font, "Keyboard", pos, 24, 0, WHITE);
-
-    return;
 }
 
-void mainMenu(Noh_Arena *arena, NohBoard_State *state) {
+void main_menu(Noh_Arena *arena, NB_State *state) {
     (void)arena;
     if (IsKeyPressed(KEY_SCROLL_LOCK)) {
         state->view = NB_ShowKeyboard;
@@ -59,16 +120,21 @@ void mainMenu(Noh_Arena *arena, NohBoard_State *state) {
     Vector2 pos = { .x = 0, .y = 0 };
     DrawTextEx(nb_font, "Main menu", pos, 24, 0, WHITE);
 
-    return;
+    pos.x = 10;
+    pos.y = 100;
+    Vector2 size = { .x = 250, .y = 50 };
+    if (render_button("Switch to Keyboard", pos, size)) state->view = NB_ShowKeyboard;
+
+    pos.y += 65;
+    if (render_button("Quit", pos, size)) state->running = false;
 }
 
 int main(void)
 {
     Noh_Arena arena = {0};
 
-
     // Initial state.
-    NohBoard_State state = { .screen_size = { .x = 800, .y = 600 }, .view = NB_MainMenu };
+    NB_State state = { .screen_size = { .x = 800, .y = 600 }, .view = NB_MainMenu, .running = true };
 
     const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
     //const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
@@ -88,7 +154,7 @@ int main(void)
     Noh_String str = {0};
 
     SetTargetFPS(60);
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && state.running)
     {
         noh_arena_save(&arena);
         uint16 *pressed_keys;
@@ -114,11 +180,11 @@ int main(void)
         ClearBackground(BLACK);
         switch (state.view) {
             case NB_MainMenu:
-                mainMenu(&arena, &state);
+                main_menu(&arena, &state);
                 break;
 
             case NB_ShowKeyboard:
-                showKeyboard(&arena, &state, &pressed_keys, num_pressed_keys);
+                show_keyboard(&arena, &state, &pressed_keys, num_pressed_keys);
                 break;
 
             default:
