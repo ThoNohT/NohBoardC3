@@ -164,7 +164,7 @@ void hooks_shutdown() {
 
 void hooks_initialize(Noh_Arena *arena, const char *kb_path_, const char *mouse_path_) {
     noh_log(NOH_INFO, "Initializing hooks.");
-    noh_log(NOH_INFO, "KB_PATH: %s", kb_path);
+    noh_log(NOH_INFO, "KB_PATH: %s", kb_path_);
     kb_path = kb_path_;
     mouse_path = mouse_path_;
 

@@ -1,4 +1,5 @@
 #include <raylib.h>
+#include <raymath.h>
 #include <math.h>
 #include <assert.h>
 
@@ -6,42 +7,68 @@
 #include "noh.h"
 #include "hooks.h"
 
-void calculate_speed(int is_accellerating, float *speed) {
-    if (is_accellerating > 0) {
-        *speed += .25 * is_accellerating;
-        if (*speed > 201) *speed = 201;
-    } else {
-        if (*speed > 0) *speed -= 1;
-        if (*speed < 0) *speed = 0;
+//#define NB_DEBUG_KEYPRESSES
+
+typedef enum {
+    NB_ShowKeyboard,
+    NB_MainMenu
+} NohBoard_View;
+
+typedef struct {
+    Vector2 screen_size;
+
+    NohBoard_View view;
+} NohBoard_State;
+
+// The default font to use for menus.
+Font nb_font;
+
+void showKeyboard(Noh_Arena *arena, NohBoard_State *state, uint16 **pressed_keys, size_t num_pressed_keys) {
+    if (IsKeyPressed(KEY_SCROLL_LOCK)) {
+        state->view = NB_MainMenu;
+        return;
     }
+
+    // Change the background if any key is pressed.
+    if (num_pressed_keys > 0) {
+        static Color background_color = CLITERAL(Color){ 20, 20, 20, 255 };
+        ClearBackground(background_color);
+
+        uint16 key = *pressed_keys[0];
+        noh_arena_save(arena);
+        char *keyStr = noh_arena_sprintf(arena, "%hu", key);
+
+        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, keyStr, 120, 0), 0.5);
+        Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, 0.5), text_offset);
+        DrawTextEx(nb_font, keyStr, pos, 120, 0, WHITE);
+    }
+
+    Vector2 pos = { .x = 0, .y = 0 };
+    DrawTextEx(nb_font, "Keyboard", pos, 24, 0, WHITE);
+
+    return;
 }
 
-float calculate_angle(float speed, float deadzone, float minSpeed, float maxSpeed, float doubleAt) {
-    assert(minSpeed <= doubleAt && "doubleAt must not be lower than minSpeed.");
-    assert(doubleAt <= maxSpeed && "maxSpeed must not be lower than doubleAt.");
+void mainMenu(Noh_Arena *arena, NohBoard_State *state) {
+    (void)arena;
+    if (IsKeyPressed(KEY_SCROLL_LOCK)) {
+        state->view = NB_ShowKeyboard;
+        return;
+    }
 
-    double totalRadians = 2 * PI - 2 * deadzone; // Deadzone in radians around the bottom (left and right).
-    double startAngle = -PI - deadzone;
+    Vector2 pos = { .x = 0, .y = 0 };
+    DrawTextEx(nb_font, "Main menu", pos, 24, 0, WHITE);
 
-    double singleRange = doubleAt - minSpeed;
-    double doubleRange = (maxSpeed - doubleAt) / 2;
-    double totalRange = singleRange + doubleRange;
-
-    float x = speed - minSpeed;
-    doubleAt = doubleAt - minSpeed;
-    float speedAngle = (x <= doubleAt)
-        ? (x / totalRange) * totalRadians
-        : (doubleAt / totalRange + ((x - doubleAt) / totalRange / 2)) * totalRadians;
-
-    return startAngle + speedAngle;
+    return;
 }
 
 int main(void)
 {
     Noh_Arena arena = {0};
 
-    const int screenWidth = 800;
-    const int screenHeight = 600;
+
+    // Initial state.
+    NohBoard_State state = { .screen_size = { .x = 800, .y = 600 }, .view = NB_MainMenu };
 
     const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
     //const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
@@ -51,10 +78,26 @@ int main(void)
     hooks_initialize(&arena, kb_path, mouse_path);
     noh_arena_rewind(&arena);
 
-    InitWindow(screenWidth, screenHeight, "Speedometer test");
+    SetTraceLogLevel(LOG_WARNING); 
+    InitWindow(state.screen_size.x, state.screen_size.y, "NohBoard");
 
-    float speed = 0;
-    Font font = GetFontDefault();
+    int count = GetMonitorCount();
+    noh_log(NOH_INFO, "%i monitors...", count);
+    int current = GetCurrentMonitor();
+    for (int i = 0; i < count; i++) {
+        const char *name = GetMonitorName(i);
+        int width = GetMonitorWidth(i);
+        int height = GetMonitorHeight(i);
+        if (current == i) {
+            noh_log(NOH_INFO, "Monitor %i (current): [%ix%i] %s", i, width, height, name);
+        } else {
+            noh_log(NOH_INFO, "Monitor %i: [%ix%i] %s", i, width, height, name);
+        }
+    }
+
+    //SetWindowPosition(width, 0);
+    nb_font = LoadFontEx("./assets/Roboto-Regular.ttf", 120, 0, 0);
+    SetExitKey(0);
 
     Noh_String str = {0};
 
@@ -62,11 +105,11 @@ int main(void)
     while (!WindowShouldClose())
     {
         noh_arena_save(&arena);
-        uint16 *pressed_keys = NULL;
+        uint16 *pressed_keys;
         size_t num_pressed_keys = hooks_get_pressed_kb_keys(&arena, &pressed_keys);
-        bool any_pressed = num_pressed_keys > 0;
-        calculate_speed(num_pressed_keys, &speed);
 
+#ifdef NB_DEBUG_KEYPRESSES
+        bool any_pressed = num_pressed_keys > 0;
         if (any_pressed) {
             noh_string_append_cstr(&str, "- ");
             for (size_t i = 0; i < num_pressed_keys; i++) {
@@ -77,69 +120,25 @@ int main(void)
             noh_log(NOH_INFO, str.elems);
             noh_string_reset(&str);
         }
+#endif
 
         noh_arena_rewind(&arena);
 
         BeginDrawing();
-
         ClearBackground(BLACK);
-        // Simple display of speed.
-        DrawRectangle(10, screenHeight - speed, 20, speed, MAROON);
-        DrawText(TextFormat("%i", (int)speed), 10, 40, 20, LIGHTGRAY);
+        switch (state.view) {
+            case NB_MainMenu:
+                mainMenu(&arena, &state);
+                break;
 
-        // Speedometer.
-        int radius = 200;
-        float minSpeed = 0;
-        float maxSpeed = 240;
-        float doubleAt = 60;
+            case NB_ShowKeyboard:
+                showKeyboard(&arena, &state, &pressed_keys, num_pressed_keys);
+                break;
 
-        int cx = screenWidth / 2;
-        int cy = screenHeight / 2;
-
-        // Draw speed steps.
-        size_t i = 0;
-        for (unsigned int step = minSpeed ; step <= maxSpeed ; step += (step < doubleAt) ? 5 : 10) {
-            float angle = calculate_angle(step, PI / 4, minSpeed, maxSpeed, doubleAt);
-            float x = cos(angle);
-            float y = sin(angle);
-
-            // Draw stripes.
-            Color color = WHITE;
-            if (step == 30 || step == 50) color = RED;
-
-            int stripeLength = 20;
-            if (i % 2 == 1) stripeLength = 10; 
-
-            Vector2 start = { .x = cx + (radius - stripeLength) * x, .y = cy + (radius - stripeLength) * y };
-            Vector2 end = { .x = cx + (radius * x), .y = cy + (radius * y) };
-            DrawLineEx(start, end, 2, color);
-
-            // Draw speed number.
-            if (i % 2 == 0) {
-                int fontSize = 24;
-                if (i % 4 != 0) fontSize = 18;
-                const char *text = TextFormat("%i", step);
-                Vector2 textSize = MeasureTextEx(font, text, fontSize, 1);
-
-                int textInset = 45;
-                Vector2 textMiddle = { .x = cx + (radius - textInset) * x, .y = cy + (radius - textInset) * y };
-                textMiddle.x -= textSize.x / 2;
-                textMiddle.y -= textSize.y / 2;
-
-                DrawTextEx(font, text, textMiddle, fontSize, 1, LIGHTGRAY);
-            }
-            i++;
+            default:
+                assert(false && "Invalid view.");
+                break;
         }
-
-        // Draw indicator line.
-        float angle = calculate_angle(speed, PI / 4, minSpeed, maxSpeed, doubleAt);
-        float x = cos(angle);
-        float y = sin(angle);
-        DrawCircle(cx, cy, 20, DARKGRAY);
-        Vector2 start = { .x = cx - 20 * x, .y = cy - 20 * y };
-        Vector2 end = { .x = cx + (radius - 30) * x, .y = cy + (radius - 30) * y };
-        DrawLineEx(start, end, 2, WHITE);
-
         EndDrawing();
     }
 

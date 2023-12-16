@@ -144,6 +144,16 @@ int main(int argc, char **argv) {
         if (!noh_cmd_run_sync(cmd)) return 1;
         noh_cmd_free(&cmd);
 
+    } else if (strcmp(command, "test") == 0) {
+        // Build and debug.
+        if (!build_raylib()) return 1;
+        if (!build_nohboard()) return 1;
+
+        Noh_Cmd cmd = {0};
+        noh_cmd_append(&cmd, "gf2", "./build/NohBoard");
+        if (!noh_cmd_run_sync(cmd)) return 1;
+        noh_cmd_free(&cmd);
+
     } else if (strcmp(command, "clean") == 0) {
         Noh_Cmd cmd = {0};
         noh_cmd_append(&cmd, "rm", "-rf", "./build/");
