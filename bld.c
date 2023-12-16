@@ -3,8 +3,11 @@
 #define NOH_BLD_IMPLEMENTATION
 #include "noh_bld.h"
 
+#define RAYLIB_PATH "./raylib-4.5.0"
+
 bool build_nohboard() {
     bool result = true;
+    Noh_Arena arena = {0};
 
     Noh_Cmd cmd = {0};
     Noh_File_Paths input_paths = {0};
@@ -25,7 +28,9 @@ bool build_nohboard() {
 
     // c-flags
     noh_cmd_append(&cmd, "-Wall", "-Wextra", "-ggdb");
-    noh_cmd_append(&cmd, "-I./raylib/src");
+
+    char *raylib_link = noh_arena_sprintf(&arena, "-I%s/src", RAYLIB_PATH);
+    noh_cmd_append(&cmd, raylib_link);
 
     // Output
     noh_cmd_append(&cmd, "-o", "./build/NohBoard");
@@ -43,6 +48,7 @@ bool build_nohboard() {
 defer:
     noh_cmd_free(&cmd);
     noh_da_free(&input_paths);
+    noh_arena_free(&arena);
     return result;
 }
 
@@ -60,7 +66,7 @@ bool build_raylib() {
     bool updated = false;
     Noh_Arena arena = {0};
     for (size_t i = 0; i < noh_array_len(files); i++) {
-        char *source_path = noh_arena_sprintf(&arena, "./raylib/src/%s.c", files[i]);
+        char *source_path = noh_arena_sprintf(&arena, "%s/src/%s.c", RAYLIB_PATH, files[i]);
         char *output_path = noh_arena_sprintf(&arena, "./build/raylib/%s.o", files[i]);
 
         int needs_rebuild = noh_output_is_older(output_path, &source_path, 1);
@@ -72,7 +78,8 @@ bool build_raylib() {
         noh_cmd_append(&cmd, "clang");
         noh_cmd_append(&cmd, "-Wno-everything"); // We don't care about warnings in the raylib source.
         noh_cmd_append(&cmd, "-ggdb", "-DPLATFORM_DESKTOP");
-        noh_cmd_append(&cmd, "-I./raylib/src/external/glfw/include");
+        char *glfw_include_path = noh_arena_sprintf(&arena, "-I%/src/external/glfw/include", RAYLIB_PATH);
+        noh_cmd_append(&cmd, glfw_include_path);
         noh_cmd_append(&cmd, "-c", source_path);
         noh_cmd_append(&cmd, "-o", output_path);
 
