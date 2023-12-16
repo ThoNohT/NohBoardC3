@@ -102,11 +102,20 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, siz
 
         uint16 key = *pressed_keys[0];
         noh_arena_save(arena);
-        char *keyStr = noh_arena_sprintf(arena, "%hu", key);
+        Noh_String str = {0};
+        for (size_t i = 0; i < num_pressed_keys; i++) {
+            char *keyStr = noh_arena_sprintf(arena, "%hu", key);
+            noh_string_append_cstr(&str, keyStr);
 
-        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, keyStr, 120, 0), .5);
+            if (i < num_pressed_keys - 1) noh_string_append_cstr(&str, " - ");
+        }
+        noh_string_append_null(&str);
+
+        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, str.elems, 120, 0), .5);
         Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, .5), text_offset);
-        DrawTextEx(nb_font, keyStr, pos, 120, 0, WHITE);
+        DrawTextEx(nb_font, str.elems, pos, 120, 0, WHITE);
+        noh_arena_reset(&arena);
+        noh_string_free(&str);
     }
 }
 
