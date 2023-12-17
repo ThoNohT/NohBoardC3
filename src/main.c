@@ -100,10 +100,10 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, siz
         static Color background_color = CLITERAL(Color){ 20, 20, 20, 255 };
         ClearBackground(background_color);
 
-        uint16 key = *pressed_keys[0];
         noh_arena_save(arena);
         Noh_String str = {0};
         for (size_t i = 0; i < num_pressed_keys; i++) {
+            uint16 key = (*pressed_keys)[i];
             char *keyStr = noh_arena_sprintf(arena, "%hu", key);
             noh_string_append_cstr(&str, keyStr);
 
@@ -114,7 +114,7 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, siz
         Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, str.elems, 120, 0), .5);
         Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, .5), text_offset);
         DrawTextEx(nb_font, str.elems, pos, 120, 0, WHITE);
-        noh_arena_reset(&arena);
+        noh_arena_reset(arena);
         noh_string_free(&str);
     }
 }
@@ -183,8 +183,6 @@ int main(void)
             noh_string_reset(&str);
         }
 #endif
-
-        noh_arena_rewind(&arena);
 
         BeginDrawing();
         ClearBackground(BLACK);
