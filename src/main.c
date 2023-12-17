@@ -90,7 +90,7 @@ bool render_button(char *text, Vector2 position, Vector2 size) {
 }
 
 void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, size_t num_pressed_keys) {
-    if (IsKeyPressed(KEY_SCROLL_LOCK)) {
+    if (IsKeyPressed(KEY_F10)) {
         state->view = NB_MainMenu;
         return;
     }
