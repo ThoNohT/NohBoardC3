@@ -145,9 +145,10 @@ int main(void)
     // Initial state.
     NB_State state = { .screen_size = { .x = 800, .y = 600 }, .view = NB_MainMenu, .running = true };
 
-    const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
-    //const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
-    const char *mouse_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-mouse";
+    //const char *kb_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-kbd";
+    const char *kb_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd";
+    //const char *mouse_path = "/dev/input/by-id/usb-Logitech_USB_Receiver-if02-event-mouse";
+    const char *mouse_path = "/dev/input/by-path/platform-AMDI0010:00-event-mouse";
 
     noh_arena_save(&arena);
     hooks_initialize(&arena, kb_path, mouse_path);

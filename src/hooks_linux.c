@@ -164,9 +164,20 @@ void hooks_shutdown() {
 
 void hooks_initialize(Noh_Arena *arena, const char *kb_path_, const char *mouse_path_) {
     noh_log(NOH_INFO, "Initializing hooks.");
-    noh_log(NOH_INFO, "KB_PATH: %s", kb_path_);
+    noh_log(NOH_INFO, "Keyboard path: %s", kb_path_);
+    noh_log(NOH_INFO, "Mouse path: %s", mouse_path_);
     kb_path = kb_path_;
     mouse_path = mouse_path_;
+
+    // Check that the files exist.
+    if (access(kb_path, F_OK) != 0) {
+        noh_log(NOH_ERROR, "Keyboard path %s does not exist.", kb_path);
+        return;
+    }
+    if (access(mouse_path, F_OK) != 0) {
+        noh_log(NOH_ERROR, "Mouse path %s does not exist.", kb_path);
+        return;
+    }
 
     // Fill in the keys that are pressed when starting.
     uint8 *pressed_at_start;
