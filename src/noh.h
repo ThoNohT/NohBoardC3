@@ -121,13 +121,13 @@ do {                                                                         \
 } while (0)
 
 // Frees the elements in a dynamic array, and resets the count and capacity.
-#define noh_da_free(da)     \
-do {                        \
+#define noh_da_free(da)       \
+do {                          \
     if ((da)->capacity > 0) { \
-        (da)->count = 0;    \
-        (da)->capacity = 0; \
-        free((da)->elems);  \
-    }                       \
+        (da)->count = 0;      \
+        (da)->capacity = 0;   \
+        free((da)->elems);    \
+    }                         \
 } while (0)
 
 // Resets the count of a dynamic array to 0.
