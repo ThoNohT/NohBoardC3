@@ -43,6 +43,18 @@
 #define uint64 unsigned long
 #endif
 
+#ifndef KB
+#define KB << 10
+#endif
+
+#ifndef MB
+#define MB << 20
+#endif
+
+#ifndef GB
+#define GB << 30
+#endif
+
 ///////////////////////// Core stuff /////////////////////////
 
 #define noh_array_len(array) (sizeof(array)/sizeof(array[0]))
@@ -138,39 +150,65 @@ do {                    \
 
 ///////////////////////// Arena /////////////////////////  
 
-#define NOH_ARENA_INIT_CAP 256
+#define NOH_ARENA_INIT_CAP 1<<10
 
 // Checkpoints in an arena.
 typedef struct {
-    size_t *elems;
+    size_t block_id;
+    size_t offset_in_block;
+} Noh_Arena_Checkpoint;
+
+typedef struct {
+    Noh_Arena_Checkpoint *elems;
     size_t count;
     size_t capacity;
 } Noh_Arena_Checkpoints;
 
-// An arena for storing temporary data.
+// Data blocks in an arena.
 typedef struct {
-    char* data;
-    Noh_Arena_Checkpoints checkpoints;
+    char *data;
     size_t size;
     size_t capacity;
+} Noh_Arena_Data_Block;
+
+typedef struct {
+    Noh_Arena_Data_Block *elems;
+    size_t count;
+    size_t capacity;
+} Noh_Arena_Data_Blocks;
+
+// An arena for storing temporary data.
+typedef struct {
+    Noh_Arena_Data_Blocks blocks; // Blocks are always in order of increasing capacity.
+    Noh_Arena_Checkpoints checkpoints;
+    size_t active_block; // The index of the block up to which data has been allocated.
 } Noh_Arena;
 
-// Initialize an empty arena with the specified capacity.
+// Initialize an empty arena with the specified capacity. A checkpoint is also saved at the empty arena.
 Noh_Arena noh_arena_init(size_t capacity);
 
-// Resets the size of an arena to 0.
+// Resets the size of an arena to 0, keeping the data reserved. Any checkpoints are removed and one is saved at the
+// start of the arena. Requires that the arena is initialized with noh_arena_init.
 void noh_arena_reset(Noh_Arena *arena);
 
-// Frees all data in an arena, setting the count and capacity to 0.
+// Frees all data in an arena. Any checkpoints are removed. The arena is no longer initialized, and cannot be used
+// anymore.
 void noh_arena_free(Noh_Arena *arena);
 
+// Ensures that there is room available for the requested size of data. Does not return a pointer to the data to the
+// caller. Used if you want to pre-allocate a larger set of data that will later be filled by multiple allocations,
+// keeping it in a single block.
+void noh_arena_reserve(Noh_Arena *arena, size_t size);
+
 // Allocates data in an arena of the requested size, returns the start of the data.
+// Requires at least one checkpoint, either from noh_arena_init, noh_arena_reset or noh_arena_save.
 void *noh_arena_alloc(Noh_Arena *arena, size_t size);
 
-// Saves the current size of the arena.
+// Saves the current position in of the arena in a checkpoint. Requires that the arena is initialized with
+// noh_arena_init.
 void noh_arena_save(Noh_Arena *arena);
 
-// Rewinds an arena to the last saved checkpoint.
+// Rewinds an arena to the last saved checkpoint. Requires at least one checkpoint.
 void noh_arena_rewind(Noh_Arena *arena);
 
 // Copies a c-string to the arena.
@@ -317,62 +355,171 @@ void noh_log(Noh_Log_Level level, const char *fmt, ...)
 
 ///////////////////////// Arena /////////////////////////  
 
+// Alin a size such that it is a multiple of 8, keeping blocks of 64 bits.
+size_t align_size(size_t size) {
+    return size + (size % 8);
+}
+
 Noh_Arena noh_arena_init(size_t size) {
     Noh_Arena arena = {0};
 
-    arena.data = noh_realloc_check(arena.data, size);
+    Noh_Arena_Data_Blocks blocks = {0};
+    arena.blocks = blocks;
+
     Noh_Arena_Checkpoints checkpoints = {0};
     arena.checkpoints = checkpoints;
-    arena.size = 0;
-    arena.capacity = size;
+    arena.active_block = 0;
+
+    Noh_Arena_Data_Block block = {0};
+    block.capacity = align_size(size);
+    block.data = noh_realloc_check(block.data, block.capacity);
+    block.size = 0;
+    noh_da_append(&arena.blocks, block);
+
+    // Nice to have a checkpoint at the start.
+    noh_arena_save(&arena);
 
     return arena;
 }
 
 void noh_arena_reset(Noh_Arena *arena) {
-    arena->size = 0;
-    arena->checkpoints.count = 0;
+    // We need to load a block and save it in the checkpoint, so at least one block needs to be allocated.
+    assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
+
+    // Reset checkpoints.
+    noh_da_reset(&arena->checkpoints);
+
+    // Insert a checkpoint at the start so we can rewind to this checkpoint.
+    Noh_Arena_Checkpoint start_checkpoint = {0};
+    start_checkpoint.block_id = 0;
+    start_checkpoint.offset_in_block = 0;
+    noh_da_append(&arena->checkpoints, start_checkpoint);
+
+    // Rewind to the checkpoint, and place the checkpoint back in such that there is again a checkpoint at the start.
+    noh_arena_rewind(arena);
+    arena->checkpoints.count += 1;
 }
 
 void noh_arena_free(Noh_Arena *arena) {
-    free(arena->data);
+    // Remove checkpoints.
     noh_da_free(&arena->checkpoints);
-    arena->capacity = 0;
-    arena->size = 0;
+
+    // Free all blocks.
+    for (size_t i = 0; i < arena->blocks.count; i++) {
+        Noh_Arena_Data_Block *block = &arena->blocks.elems[i];
+        free(block->data);
+    }
+
+    // Remove blocks.
+    noh_da_free(&arena->blocks);
+
+    arena->active_block = 0;
 }
 
 void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
-    size_t new_size = arena->size + size;
+    // This is technically not needed, but it is nice to be consistent and ensure that there is always a checkpoint
+    // at the beginning, either from noh_arena_init, noh_arena_reset or noh_arena_save.
+    assert(arena->checkpoints.count > 0 && "Please ensure that there is at least one checkpoint before allocating.");
 
-    // If the new size would exceed the capacity, extend the arena size.
-    if (new_size > arena->capacity) {
-        size_t new_cap = arena->capacity == 0 ? NOH_ARENA_INIT_CAP : arena->capacity * 2;
-        // Double capacity until the new size fits.
-        while (new_cap < new_size) new_cap *= 2;
+    // Reserve will ensure that we have the required space available. Then we just need to find the block where we can
+    // allocate the requested space.
+    noh_arena_reserve(arena, size);
 
-        // Re-allocate data, free old data and set new capacity.
-        arena->data = noh_realloc_check(arena->data, new_cap);
-        arena->capacity = new_cap;
+    // Find the block that fits the requested size.
+    size_t current_block = arena->active_block;
+    Noh_Arena_Data_Block *block = &arena->blocks.elems[current_block];
+    while (block->capacity - block->size < size && current_block < arena->blocks.count) {
+        current_block += 1;
+        block = &arena->blocks.elems[current_block];
     }
 
-    // Return pointer to start of returned memory block
-    void *result = &arena->data[arena->size];
- 
-    // Move size to beyond requested size.
-    arena->size = new_size;
+    assert(block->capacity - block->size >= size && "Reserve should have provided a large enough block.");
+
+    arena->active_block = current_block;
+
+    // Allocate data in the block and return a pointer to the start.
+    void *result = &block->data[block->size];
+    block->size += size;
     return result;
 }
 
+void noh_arena_reserve(Noh_Arena *arena, size_t size) {
+    assert(arena->blocks.count > 0 && "Please ensure that the arena is initialized.");
+
+    size_t requested_size = align_size(size);
+    
+    while (arena->active_block < arena->blocks.count) {
+        Noh_Arena_Data_Block *block = &arena->blocks.elems[arena->active_block];
+        // If the requested size fits into the current block, use it and return.
+        if (block->capacity - block->size >= requested_size) {
+            return;
+        }
+
+        // If it doesn't, free the block if it was empty. Note that all but the current block will be empty, since
+        // rewinding sets the sizes of later blocks to 0. Current block may be empty.
+        if (block->size == 0) {
+            free(block->data);
+
+            // This reduces arena->blocks.count, thus ensuring termination of the loop.
+            noh_da_remove_at(&arena->blocks, arena->active_block);
+        } else {
+            // If we're not cleaning this block up, move the pointer.
+            arena->active_block += 1;
+        }
+    }
+
+    // If no block was found that fits, create a new one that is at least as big as the requested size, and twice the
+    // size of the current block.
+    // arena->active_block will now point to just beyond the last existing block. We can get the previous capacity
+    // only if we didn't just delete the first block.
+    size_t prev_cap = 0;
+    if (arena->active_block > 1) prev_cap = arena->blocks.elems[arena->active_block - 1].capacity;
+
+    size_t new_cap = NOH_ARENA_INIT_CAP;
+    // If not big enough to double the previous cap, set to double the previous capacity.
+    if (prev_cap * 2 > new_cap) new_cap = prev_cap * 2;
+    // Keep doubling until the requested size fits.
+    while (requested_size > new_cap) new_cap *= 2;
+
+    Noh_Arena_Data_Block new_block = {0};
+    new_block.data = noh_realloc_check(new_block.data, new_cap);
+    new_block.capacity = new_cap;
+    new_block.size = 0;
+
+    // After adding this block, arena->active_block will point to this new block.
+    noh_da_append(&(arena->blocks), new_block);
+}
+
 void noh_arena_save(Noh_Arena *arena) {
-    noh_da_append(&arena->checkpoints, arena->size);
+    // We need to load a block and save it in the checkpoint, so at least one block needs to be allocated.
+    assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
+
+    Noh_Arena_Checkpoint checkpoint = {0};
+    checkpoint.block_id = arena->active_block;
+
+    Noh_Arena_Data_Block *block = &arena->blocks.elems[arena->active_block];
+    checkpoint.offset_in_block = block->size;
+
+    noh_da_append(&(arena->checkpoints), checkpoint);
 }
 
 void noh_arena_rewind(Noh_Arena *arena) {
     assert(arena->checkpoints.count > 0 && "No history to rewind");
 
-    size_t checkpoint = arena->checkpoints.elems[arena->checkpoints.count - 1];
+    // Restore to block from checkpoint.
+    Noh_Arena_Checkpoint *checkpoint = &arena->checkpoints.elems[arena->checkpoints.count - 1];
+    arena->active_block = checkpoint->block_id;
+
+    // Rewind all blocks from the active block to the end.
+    for (size_t i = arena->active_block; i < arena->blocks.count; i++) {
+        Noh_Arena_Data_Block *block = &arena->blocks.elems[i];
+        if (i == arena->active_block) block->size = checkpoint->offset_in_block;
+        else block->size = 0;
+
+    }
+
+    // Remove checkpoint.
     arena->checkpoints.count -= 1;
-    arena->size = checkpoint;
 }
 
 char *noh_arena_strdup(Noh_Arena *arena, const char *cstr) {
