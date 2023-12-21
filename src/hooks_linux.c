@@ -141,15 +141,16 @@ static void* cleanup() {
 }
 
 static size_t load_keymap(Noh_Arena *arena, const char *path, uint8 **keys) {
-    static size_t len = (KEY_MAX / 8 + 1) * sizeof(uint8);
+    static size_t len = (KEY_MAX / sizeof(uint8) + 1) * sizeof(uint8);
 
     // Allocate some zeroed memory.
     *keys = noh_arena_alloc(arena, len);
     memset(*keys, 0, len);
 
     // Load the keymap from the input file.
-    FILE *fd = fopen(path, "r");
-    ioctl(fileno(fd), EVIOCGKEY(len), *keys);
+    int fd = open(path, O_RDONLY);
+    ioctl(fd, EVIOCGKEY(len), *keys);
+    close(fd);
 
     // Return the length;
     return len;
