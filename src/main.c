@@ -3,9 +3,27 @@
 #include <math.h>
 #include <assert.h>
 
+#include <unistd.h>
+#include <linux/input-event-codes.h>
+#include <linux/input.h>
+#include <sys/ioctl.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <poll.h>
+#include <string.h>
+#include <time.h>
+
 #define NOH_IMPLEMENTATION
 #include "noh.h"
 #include "hooks.h"
+
+// An input event from a /dev/input file stream.
+typedef struct {
+    struct timeval time;
+    uint16 type;
+    uint16 code;
+    uint value;
+} Input_Event;
 
 //#define NB_DEBUG_KEYPRESSES
 
@@ -138,9 +156,199 @@ void main_menu(Noh_Arena *arena, NB_State *state) {
     if (render_button("Quit", pos, size)) state->running = false;
 }
 
+typedef enum {
+    NB_Unknown,
+    NB_Keyboard,
+    NB_Mouse,
+    NB_Touchpad
+} NB_Input_Device_Type;
+
+typedef struct {
+    NB_Input_Device_Type type;
+    int fd;
+    char *path;
+    char *name;
+    char *physical_path;
+} NB_Input_Device;
+
+typedef struct {
+    NB_Input_Device *elems;
+    size_t count;
+    size_t capacity;
+} NB_Input_Devices;
+
+struct timespec gettime() {
+    struct timespec time;
+    if (clock_gettime(CLOCK_REALTIME, &time) == -1)
+    {
+        noh_log(NOH_ERROR, "Unable to determine the current time: %s", strerror(errno));
+        exit(1);
+    }
+    return time;
+}
+
+bool determine_input_devices(Noh_Arena *arena, NB_Input_Devices *devices) {
+    noh_arena_reserve(arena, 10 KB);
+
+    #define INPUT_BASE_PATH "/dev/input"
+    DIR *input_dir;
+    struct dirent *dir;
+    input_dir = opendir(INPUT_BASE_PATH);
+    if (!input_dir) {
+        noh_log(NOH_ERROR, "Could not load input files directory: %s", strerror(errno));
+        return false;
+    }
+
+    Noh_String device_path = {0};
+    struct stat statbuf;
+
+    while ((dir = readdir(input_dir)) != NULL) {
+        Noh_String_View dir_sv = noh_sv_from_cstr(dir->d_name);
+        if (noh_sv_eq(dir_sv, noh_sv_from_cstr("."))) continue;
+        if (noh_sv_eq(dir_sv, noh_sv_from_cstr(".."))) continue;
+        if (!noh_sv_starts_with(dir_sv, noh_sv_from_cstr("event"))) continue;
+
+        // Build up full path to device.
+        noh_string_reset(&device_path);
+        noh_string_append_cstr(&device_path, INPUT_BASE_PATH);
+        noh_string_append_cstr(&device_path, "/");
+        noh_string_append_cstr(&device_path, dir->d_name);
+        noh_string_append_null(&device_path);
+
+        // Check that it is not a directory.
+        if (stat(device_path.elems, &statbuf) == -1) continue;
+        if (S_ISDIR(statbuf.st_mode)) continue;
+
+        int fd;
+        if ((fd = open(device_path.elems, O_RDONLY | O_NONBLOCK)) < 0) {
+            continue;
+        }
+
+        // Determine the device name.
+        char *name = noh_arena_alloc(arena, 256);
+        if(ioctl(fd, EVIOCGNAME(256), name) < 0) {
+            noh_log(NOH_WARNING, "Could not get device name for device %s.", device_path.elems);
+            continue;
+        }
+
+        // Determine the physical device path.
+        char *phys = noh_arena_alloc(arena, 256);
+        if(ioctl(fd, EVIOCGPHYS(256), phys) < 0) {
+            noh_log(NOH_WARNING, "Could not get physical path for device %s.", device_path.elems);
+            continue;
+        }
+
+        NB_Input_Device device = {0};
+        device.type = NB_Unknown;
+        device.fd = fd;
+        device.path = noh_arena_strdup(arena, device_path.elems);
+        device.name = name;
+        device.physical_path = phys;
+
+        // Try to determine the device type based on the name.
+        // Later we can use key and relative events to add another way to determine.
+        // TODO: Is there not a better way to find this out?
+        if (noh_sv_contains_ci(noh_sv_from_cstr(device.name), noh_sv_from_cstr("mouse")))
+            device.type = NB_Mouse;
+        if (noh_sv_contains_ci(noh_sv_from_cstr(device.name), noh_sv_from_cstr("keyboard")))
+            device.type = NB_Keyboard;
+        if (noh_sv_contains_ci(noh_sv_from_cstr(device.name), noh_sv_from_cstr("touchpad")))
+            device.type = NB_Touchpad;
+
+        noh_log(NOH_INFO, "%s is a %zu, named %s on %s", device.path, device.type, device.name, device.physical_path);
+        noh_da_append(devices, device);
+    }
+
+    closedir(input_dir);
+    noh_string_free(&device_path);
+
+    // Below here, the arena will be filled with poll_fds, they can be removed before returning from this function.
+    noh_arena_save(arena);
+    struct pollfd *poll_fds = noh_arena_alloc(arena, sizeof(struct pollfd) * devices->count);
+    for (size_t i = 0; i < devices->count; i++) {
+        NB_Input_Device dev = (NB_Input_Device)devices->elems[i];
+        struct pollfd poll_fd = { .fd = dev.fd, .events = POLLIN };
+        poll_fds[i] = poll_fd;
+    }
+
+    bool checking = true;
+
+    Input_Event event = {0};
+    while (checking) {
+        int poll_result = poll(poll_fds, devices->count, 50000);
+        if (poll_result == -1) {
+            noh_log(NOH_ERROR, "Failed to poll input files: %s", strerror(errno));
+            return false;
+        }
+
+        // 0 means timeout, keep checking.
+        if (poll_result == 0) continue;
+
+        for (size_t i = 0; i < devices->count; i++) {
+            NB_Input_Device dev = (NB_Input_Device)devices->elems[i];
+            if (poll_fds[i].revents & POLLIN) {
+                int s = read(poll_fds[i].fd, &event, sizeof(event));
+                if (s < 0) {
+                    noh_log(NOH_ERROR, "error: %s", strerror(errno));
+                    continue;
+                }
+                if (s > 0) {
+                    if (event.type == EV_KEY) {
+                        static struct timespec last_ev_time = {0}; 
+                        struct timespec now = gettime();
+                        if (now.tv_sec - last_ev_time.tv_sec > 0) {
+                            last_ev_time = now;
+                            noh_log(NOH_INFO, "Key event on %s: time: %u, code: %hu, value: %u", dev.path, now.tv_sec, event.code, event.value);
+                        }
+                    } else if (event.type == EV_REL) {
+                        static struct timespec last_ev_time = {0}; 
+                        struct timespec now = gettime();
+                        if (now.tv_sec - last_ev_time.tv_sec > 0) {
+                            last_ev_time = now;
+                            noh_log(NOH_INFO, "Rel event on %s: time: %u, code: %hu, value: %u", dev.path, now.tv_sec, event.code, event.value);
+                        }
+                    } else if (event.type == EV_ABS) {
+                        static struct timespec last_ev_time = {0}; 
+                        struct timespec now = gettime();
+                        if (now.tv_sec - last_ev_time.tv_sec > 0) {
+                            last_ev_time = now;
+                            noh_log(NOH_INFO, "Abs event on %s: time: %u, code: %hu, value: %u", dev.path, now.tv_sec, event.code, event.value);
+                        }
+                    }
+
+                }
+                //checking = false;
+                //break;
+            } else if (poll_fds[i].revents & (POLLERR | POLLHUP)) {
+                noh_log(NOH_ERROR, "closing fd %d\n", poll_fds[i].fd);
+                close(poll_fds[i].fd);
+                poll_fds[i].events *= -1;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < devices->count; i++) {
+        NB_Input_Device dev = (NB_Input_Device)devices->elems[i];
+        close(dev.fd);
+    }
+
+    // TODO: The device path strings need to be freed when no longer needed.
+
+    // Remove pollfds.
+    noh_arena_reset(arena);
+
+    return true;
+}
+
+
 int main(void)
 {
-    Noh_Arena arena = {0};
+    Noh_Arena arena = noh_arena_init(1);
+
+    NB_Input_Devices input_devices = {0};
+
+    if (!determine_input_devices(&arena, &input_devices)) return 1;
+    else return -123;
 
     // Initial state.
     NB_State state = { .screen_size = { .x = 800, .y = 600 }, .view = NB_MainMenu, .running = true };
