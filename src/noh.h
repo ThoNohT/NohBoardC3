@@ -277,8 +277,24 @@ Noh_String_View noh_sv_from_cstr(const char *cstr);
 // Checks whether to string views contain the same string.
 bool noh_sv_eq(Noh_String_View a, Noh_String_View b);
 
+// Checks whether to string views contain the same string, ignoring the case.
+bool noh_sv_eq_ci(Noh_String_View a, Noh_String_View b);
+
+// Checks whether the first string view starts with the elements from second string view.
+bool noh_sv_starts_with(Noh_String_View a, Noh_String_View b);
+
+// Checks whether the first string view starts with the elements from second string view, ignoring the case.
+bool noh_sv_starts_with_ci(Noh_String_View a, Noh_String_View b);
+
+// Checks whether the first string view contains the elements from the second string view.
+bool noh_sv_contains(Noh_String_View a, Noh_String_View b);
+
+// Checks whether the first string view contains the elements from the second string view, ignoring the case.
+bool noh_sv_contains_ci(Noh_String_View a, Noh_String_View b);
+
 // Creates a cstring in an arena from a string view.
 const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv);
+
 
 // printf macros for Noh_String_View
 #define Nsv_Fmt "%.*s"
@@ -589,8 +605,8 @@ defer:
 
 ///////////////////////// String view /////////////////////////  
 
-void increase_sv_position(Noh_String_View *sv, size_t distance) {
-    if (distance <- sv->count) {
+static void increase_sv_position(Noh_String_View *sv, size_t distance) {
+    if (distance < sv->count) {
         sv->count -= distance;
         sv->elems += distance;
     } else {
@@ -660,7 +676,57 @@ bool noh_sv_eq(Noh_String_View a, Noh_String_View b) {
         if (a.elems[i] != b.elems[i]) return false;
     }
 
-    return  true;
+    return true;
+}
+
+// Check two characters case insensitively.
+bool char_eq_ci(char a, char b) {
+    // FUTURE: Unicode support?
+    // A=65, Z=90 - a=97, z=122
+    if (a >= 65 && a <= 90) a +=32;
+    if (b >= 65 && b <= 90) b +=32;
+
+    return a == b;
+}
+
+bool noh_sv_eq_ci(Noh_String_View a, Noh_String_View b) {
+    if (a.count != b.count) return false;
+
+    for (size_t i = 0; i < a.count; i++) {
+        if (!char_eq_ci(a.elems[i], b.elems[i])) return false;
+    }
+
+    return true;
+}
+
+bool noh_sv_starts_with(Noh_String_View a, Noh_String_View b) {
+    if (a.count < b.count) return false;
+    a.count = b.count;
+    return noh_sv_eq(a, b);
+}
+
+bool noh_sv_starts_with_ci(Noh_String_View a, Noh_String_View b) {
+    if (a.count < b.count) return false;
+    a.count = b.count;
+    return noh_sv_eq_ci(a, b);
+}
+
+bool noh_sv_contains(Noh_String_View a, Noh_String_View b) {
+    while (a.count >= b.count) {
+        if (noh_sv_starts_with(a, b)) return true;
+        increase_sv_position(&a, 1);
+    }
+
+    return false;
+}
+
+bool noh_sv_contains_ci(Noh_String_View a, Noh_String_View b) {
+    while (a.count >= b.count) {
+        if (noh_sv_starts_with_ci(a, b)) return true;
+        increase_sv_position(&a, 1);
+    }
+
+    return false;
 }
 
 const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv)
