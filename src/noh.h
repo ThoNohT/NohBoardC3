@@ -580,8 +580,7 @@ bool noh_string_read_file(Noh_String *string, const char *filename) {
 
     FILE *f = fopen(filename, "rb");
     if (f == NULL) {
-        // TODO: Change printf to proper logging implementaton.
-        printf("Could not open file %s: %s.\n", filename, strerror(errno));
+        noh_log(NOH_ERROR, "Could not open file %s: %s.\n", filename, strerror(errno));
         noh_return_defer(false);
     }
 
@@ -592,8 +591,7 @@ bool noh_string_read_file(Noh_String *string, const char *filename) {
     }
 
     if (ferror(f)) {
-        // TODO: Change printf to proper logging implementaton.
-        printf("Could not read file %s: %s.\n", filename, strerror(errno));
+        noh_log(NOH_ERROR, "Could not read file %s: %s.\n", filename, strerror(errno));
         noh_return_defer(false);
     }
 
