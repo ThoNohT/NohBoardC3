@@ -7,7 +7,7 @@
 
 bool build_nohboard() {
     bool result = true;
-    Noh_Arena arena = {0};
+    Noh_Arena arena = noh_arena_init(10 KB);
 
     Noh_Cmd cmd = {0};
     Noh_File_Paths input_paths = {0};
@@ -64,7 +64,7 @@ bool build_raylib() {
     char *files[] = { "raudio", "rcore", "rglfw", "rmodels", "rshapes", "rtext", "rtextures", "utils" };
 
     bool updated = false;
-    Noh_Arena arena = {0};
+    Noh_Arena arena = noh_arena_init(5 KB);
     for (size_t i = 0; i < noh_array_len(files); i++) {
         char *source_path = noh_arena_sprintf(&arena, "%s/src/%s.c", RAYLIB_PATH, files[i]);
         char *output_path = noh_arena_sprintf(&arena, "./build/raylib/%s.o", files[i]);
