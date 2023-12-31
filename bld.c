@@ -36,8 +36,8 @@ bool build_nohboard() {
     noh_cmd_append(&cmd, "-o", "./build/NohBoard");
 
     // Source
-    noh_cmd_append(&cmd, "src/main.c");
-    noh_cmd_append(&cmd, "src/hooks_linux.c");
+    noh_cmd_append(&cmd, "./src/main.c");
+    noh_cmd_append(&cmd, "./src/hooks_linux.c");
 
     // Linker
     noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread", "-lrt");

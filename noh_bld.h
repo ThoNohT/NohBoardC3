@@ -224,7 +224,7 @@ int noh_output_is_older(const char *output_path, char **input_paths, size_t inpu
         return -1;
     }
 
-    int output_time = statbuf.st_mtim.tv_sec;
+    struct timespec output_time = statbuf.st_mtim;
 
     for (size_t i = 0; i < input_paths_count; i++) {
         if (stat(input_paths[i], &statbuf) < 0) {
@@ -234,7 +234,7 @@ int noh_output_is_older(const char *output_path, char **input_paths, size_t inpu
         }
 
         // Any newer source file means the output is older.
-        if (statbuf.st_mtim.tv_sec > output_time) return 1;
+        if (diff_timespec_ms(&statbuf.st_mtim, &output_time) > 0) return 1;
     }
 
     return 0;

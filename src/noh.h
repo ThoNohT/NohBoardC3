@@ -11,6 +11,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
+#include <time.h>
 #include <sys/stat.h>
 
 ///////////////////////// Number definitions /////////////////////////
@@ -59,7 +60,7 @@
 
 #define noh_array_len(array) (sizeof(array)/sizeof(array[0]))
 #define noh_array_get(array, index) \
-    (assert(index >= 0), assert(index < noh_array_get(array)), array[index])
+    (noh_assert(index >= 0), assert(index < noh_array_get(array)), array[index])
 
 // Allows returning a file after performing some deferred code.
 // Usage:
@@ -76,7 +77,26 @@ void* noh_realloc_check_(void *target, size_t size);
 // Returns the next argument as a c-string, moves the argv pointer to the next argument and decreases argc.
 char *noh_shift_args(int *argc, char ***argv);
 
+///////////////////////// Time /////////////////////////
+
+// Returns the result of subtracting the second timespec from the first timespec, in milliseconds.
+// There is no absolute compare function, since it is assumed that a higher precision than milliseconds will not be
+// needed, and cannot really be expected to be reliable.
+long diff_timespec_ms(const struct timespec *time1, const struct timespec *time2);
+
+// Returns a timespec that represents the local time with the specified number of second and milliseconds added.
+// Negative values will lead to a time in the past.
+struct timespec get_time_in(int seconds, long milliseconds);
+
 ///////////////////////// Logging /////////////////////////
+
+// An assert macro that outputs a better format for use with vim's make command.
+#define noh_assert(condition) {                                                    \
+    if (!(condition)) {                                                            \
+        printf("%s:%i: Assertion failed: %s. \n", __FILE__, __LINE__, #condition); \
+        exit(1);                                                                   \
+    }                                                                              \
+}                                                                                  \
 
 // Possible log levels.
 typedef enum {
@@ -121,7 +141,7 @@ do {                                                                            
 // Removes the element at the specified location.
 #define noh_da_remove_at(da, index)                                          \
 do {                                                                         \
-    assert((index) < (da)->count && (index) >= 0 && "Index out of bounds."); \
+    noh_assert((index) < (da)->count && (index) >= 0 && "Index out of bounds."); \
     (da)->count -= 1;                                                        \
     if ((index) < (da)->count) {                                             \
         size_t elem_size = sizeof(*(da)->elems);                             \
@@ -330,12 +350,12 @@ bool noh_remove(const char *path);
 
 void* noh_realloc_check_(void *target, size_t size) {
     target = realloc(target, size);
-    assert(target != NULL && "Could not allocate enough memory");
+    noh_assert(target != NULL && "Could not allocate enough memory");
     return target;
 }
 
 char *noh_shift_args(int *argc, char ***argv) {
-    assert(*argc > 0 && "No more arguments");
+    noh_assert(*argc > 0 && "No more arguments");
 
     char *result = **argv;
     (*argv)++;
@@ -344,22 +364,50 @@ char *noh_shift_args(int *argc, char ***argv) {
     return result;
 }
 
+///////////////////////// Time /////////////////////////  
+
+long diff_timespec_ms(const struct timespec *time1, const struct timespec *time2) {
+    noh_assert(time1);
+    noh_assert(time2);
+
+    long res = 0;
+    // Every second adds 1000 milliseconds difference.
+    res += (time1->tv_sec - time2->tv_sec) * 1000;
+    // Every 1000 * 1000 nanoseconds add 1 millisecond difference.
+    res += (time1->tv_nsec - time2->tv_nsec) / 1000 / 1000;
+
+    return res;
+}
+
+struct timespec get_time_in(int seconds, long milliseconds) {
+    struct timespec time;
+    if (clock_gettime(CLOCK_REALTIME, &time) == -1)
+    {
+        noh_log(NOH_ERROR, "Unable to get the current time: %s", strerror(errno));
+        exit(1);
+    }
+
+    time.tv_sec += seconds;
+    time.tv_nsec += milliseconds * 1000 * 1000;
+    return time;
+}
+
 ///////////////////////// Logging /////////////////////////  
 
 void noh_log(Noh_Log_Level level, const char *fmt, ...)
 {
     switch (level) {
-    case NOH_INFO:
-        fprintf(stderr, "[INFO] ");
-        break;
-    case NOH_WARNING:
-        fprintf(stderr, "[WARNING] ");
-        break;
-    case NOH_ERROR:
-        fprintf(stderr, "[ERROR] ");
-        break;
-    default:
-        assert(false && "Invalid log level");
+        case NOH_INFO:
+            fprintf(stderr, "[INFO] ");
+            break;
+        case NOH_WARNING:
+            fprintf(stderr, "[WARNING] ");
+            break;
+        case NOH_ERROR:
+            fprintf(stderr, "[ERROR] ");
+            break;
+        default:
+            noh_assert(false && "Invalid log level");
     }
 
     va_list args;
@@ -400,7 +448,7 @@ Noh_Arena noh_arena_init(size_t size) {
 
 void noh_arena_reset(Noh_Arena *arena) {
     // We need to load a block and save it in the checkpoint, so at least one block needs to be allocated.
-    assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
+    noh_assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
 
     // Reset checkpoints.
     noh_da_reset(&arena->checkpoints);
@@ -435,7 +483,7 @@ void noh_arena_free(Noh_Arena *arena) {
 void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
     // This is technically not needed, but it is nice to be consistent and ensure that there is always a checkpoint
     // at the beginning, either from noh_arena_init, noh_arena_reset or noh_arena_save.
-    assert(arena->checkpoints.count > 0 && "Please ensure that there is at least one checkpoint before allocating.");
+    noh_assert(arena->checkpoints.count > 0 && "Please ensure that there is at least one checkpoint before allocating.");
 
     // Reserve will ensure that we have the required space available. Then we just need to find the block where we can
     // allocate the requested space.
@@ -449,7 +497,7 @@ void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
         block = &arena->blocks.elems[current_block];
     }
 
-    assert(block->capacity - block->size >= size && "Reserve should have provided a large enough block.");
+    noh_assert(block->capacity - block->size >= size && "Reserve should have provided a large enough block.");
 
     arena->active_block = current_block;
 
@@ -460,7 +508,7 @@ void *noh_arena_alloc(Noh_Arena *arena, size_t size) {
 }
 
 void noh_arena_reserve(Noh_Arena *arena, size_t size) {
-    assert(arena->blocks.count > 0 && "Please ensure that the arena is initialized.");
+    noh_assert(arena->blocks.count > 0 && "Please ensure that the arena is initialized.");
 
     size_t requested_size = align_size(size);
     
@@ -508,7 +556,7 @@ void noh_arena_reserve(Noh_Arena *arena, size_t size) {
 
 void noh_arena_save(Noh_Arena *arena) {
     // We need to load a block and save it in the checkpoint, so at least one block needs to be allocated.
-    assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
+    noh_assert(arena->blocks.count > 0 && "Please ensure that the arena is inintialized.");
 
     Noh_Arena_Checkpoint checkpoint = {0};
     checkpoint.block_id = arena->active_block;
@@ -520,7 +568,7 @@ void noh_arena_save(Noh_Arena *arena) {
 }
 
 void noh_arena_rewind(Noh_Arena *arena) {
-    assert(arena->checkpoints.count > 0 && "No history to rewind");
+    noh_assert(arena->checkpoints.count > 0 && "No history to rewind");
 
     // Restore to block from checkpoint.
     Noh_Arena_Checkpoint *checkpoint = &arena->checkpoints.elems[arena->checkpoints.count - 1];
@@ -552,7 +600,7 @@ char *noh_arena_sprintf(Noh_Arena *arena, const char *format, ...) {
     int n = vsnprintf(NULL, 0, format, args);
     va_end(args);
 
-    assert(n >= 0);
+    noh_assert(n >= 0);
     char *result = noh_arena_alloc(arena, n + 1);
     va_start(args, format);
     vsnprintf(result, n + 1, format, args);
