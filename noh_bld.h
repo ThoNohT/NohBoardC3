@@ -68,7 +68,7 @@ void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
 #define noh_rebuild_if_needed(argc, argv)                                               \
     do {                                                                                \
         const char *source_path = __FILE__;                                             \
-        assert(argc >= 1);                                                              \
+        noh_assert(argc >= 1);                                                          \
         const char *binary_path = argv[0];                                              \
                                                                                         \
         int rebuild_needed = noh_output_is_older(binary_path, (char**)&source_path, 1); \
@@ -200,7 +200,7 @@ pid_t noh_cmd_run_async(Noh_Cmd cmd) {
             noh_log(NOH_ERROR, "Could not execute child process: %s", strerror(errno));
             exit(1);
         }
-        assert(0 && "unreachable");
+        noh_assert(0 && "unreachable");
     }
 
     return cpid;
@@ -234,7 +234,7 @@ int noh_output_is_older(const char *output_path, char **input_paths, size_t inpu
         }
 
         // Any newer source file means the output is older.
-        if (diff_timespec_ms(&statbuf.st_mtim, &output_time) > 0) return 1;
+        if (noh_diff_timespec_ms(&statbuf.st_mtim, &output_time) > 0) return 1;
     }
 
     return 0;

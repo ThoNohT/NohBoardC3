@@ -82,11 +82,11 @@ char *noh_shift_args(int *argc, char ***argv);
 // Returns the result of subtracting the second timespec from the first timespec, in milliseconds.
 // There is no absolute compare function, since it is assumed that a higher precision than milliseconds will not be
 // needed, and cannot really be expected to be reliable.
-long diff_timespec_ms(const struct timespec *time1, const struct timespec *time2);
+long noh_diff_timespec_ms(const struct timespec *time1, const struct timespec *time2);
 
 // Returns a timespec that represents the local time with the specified number of second and milliseconds added.
 // Negative values will lead to a time in the past.
-struct timespec get_time_in(int seconds, long milliseconds);
+struct timespec noh_get_time_in(int seconds, long milliseconds);
 
 ///////////////////////// Logging /////////////////////////
 
@@ -167,6 +167,34 @@ do {                          \
 do {                    \
     (da)->count = 0;    \
 } while (0)
+
+///////////////////////// Circular buffer /////////////////////////  
+
+// Initializes a circular buffer, similar to a dynamic array, but adding elements should be done with noh_cb_insert.
+// This call should be the only one to allocate memory to hold the data and set the capacity.
+#define noh_cb_initialize(da, size) {                                                               \
+    noh_assert((da)->capacity == 0 && "Cannot initialize an already initialized circular buffer."); \
+    noh_assert((size) > 0 && "Cannot initialize an empty circular buffer.");                        \
+                                                                                                    \
+    (da)->capacity = size;                                                                          \
+    (da)->elems = noh_realloc_check((da)->elems, (da)->capacity * sizeof(*(da)->elems));            \
+    (da)->start = 0;                                                                                \
+    (da)->count = 0;                                                                                \
+}                                                                                                   \
+
+// Inserts an element in a dynamic array as if it is a circular buffer, will not extend beyond the capacity of the
+// dynamic array but instead overwrite the oldest element.
+#define noh_cb_insert(da, elem)                                              \
+do {                                                                         \
+    noh_assert((da)->capacity > 0 && "Circular buffer is not initialized."); \
+                                                                             \
+    if ((da)->count < (da)->capacity) {                                      \
+        (da)->elems[(da)->count++] = (elem);                                 \
+    } else {                                                                 \
+        (da)->elems[(da)->start] = (elem);                                   \
+        (da)->start = ((da)->start + 1) % (da)->count;                       \
+    }                                                                        \
+} while(0)
 
 ///////////////////////// Arena /////////////////////////  
 
@@ -366,7 +394,7 @@ char *noh_shift_args(int *argc, char ***argv) {
 
 ///////////////////////// Time /////////////////////////  
 
-long diff_timespec_ms(const struct timespec *time1, const struct timespec *time2) {
+long noh_diff_timespec_ms(const struct timespec *time1, const struct timespec *time2) {
     noh_assert(time1);
     noh_assert(time2);
 
@@ -379,7 +407,7 @@ long diff_timespec_ms(const struct timespec *time1, const struct timespec *time2
     return res;
 }
 
-struct timespec get_time_in(int seconds, long milliseconds) {
+struct timespec noh_get_time_in(int seconds, long milliseconds) {
     struct timespec time;
     if (clock_gettime(CLOCK_REALTIME, &time) == -1)
     {

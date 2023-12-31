@@ -13,6 +13,7 @@ bool build_nohboard() {
     Noh_File_Paths input_paths = {0};
     noh_da_append(&input_paths, "./src/noh.h");
     noh_da_append(&input_paths, "./src/main.c");
+    noh_da_append(&input_paths, "./src/hooks.c");
     noh_da_append(&input_paths, "./src/hooks_linux.c");
     noh_da_append(&input_paths, "./src/hooks.h");
     noh_da_append(&input_paths, "./build/raylib/libraylib.a");
