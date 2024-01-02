@@ -1,17 +1,10 @@
 #include <raylib.h>
 #include <raymath.h>
-#include <math.h>
-#include <assert.h>
 
-#include <unistd.h>
-#include <linux/input-event-codes.h>
-#include <linux/input.h>
-#include <sys/ioctl.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <poll.h>
-#include <string.h>
-#include <time.h>
+// Note that the import <linux/input-event-codes.h> has different codes for keys than <raylib.h>.
+// All interaction with the UI will happen through Raylib keycode checking, therefore, <linux/input-event-codes.h>
+// should not be included wherever UI code is written, the hooking subsystem can use it for its own logic, but it
+// just exposes the pressed keys as numeric values that should be given meaning through keyboard files.
 
 #define NOH_IMPLEMENTATION
 #include "noh.h"
