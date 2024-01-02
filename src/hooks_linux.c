@@ -249,9 +249,10 @@ static void* cleanup() {
             } else {
                 // Some keys are still pressed, check all of them against the loaded keymap.
                 // Remove keys from the back forward so we don't mess with the indexes of keys still to check.
-                for (size_t j = list->count - 1 ; j >= 0 ; j--) {
+                // Use a long and not size_t for j, since we need it to be able to go below 0 to exit the loop.
+                for (long j = list->count - 1 ; j >= 0 ; j--) {
                     if (!test_bit(currently_pressed, keymap_len, list->elems[j])) {
-                        noh_da_remove_at(list, j);
+                        noh_da_remove_at(list, (size_t)j);
                     }
                 }
             }
