@@ -140,7 +140,7 @@ bool noh_proc_wait(pid_t pid)
 
 bool noh_procs_wait(Noh_Procs procs) {
     bool success = true;
-    for (size_t i = 0; i < procs.count ; i++) {
+    for (size_t i = 0; i < procs.count; i++) {
         success = noh_proc_wait(procs.elems[i]) && success;
     }
 

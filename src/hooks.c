@@ -58,26 +58,26 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
 
     // Space for pressed keys.
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
-        NBI_Pressed_Keys_List list = state->pressed_keys.elems[i];
-        if (list.count == 0) continue;
+        NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
+        if (list->count == 0) continue;
 
         // Reserve space for the struct, the device_id string and all elements in the list.
         no_keys_lists++;
         needed_space += sizeof(NB_Pressed_Keys_List);
-        needed_space += strlen(list.device_id) * sizeof(char);
-        needed_space += list.count * sizeof(list.elems[0]);
+        needed_space += strlen(list->device_id) * sizeof(char);
+        needed_space += list->count * sizeof(list->elems[0]);
     }
 
     // Space for axis histories.
     for (size_t i = 0; i < state->axes.count; i++) {
-        NBI_Axis_History history = state->axes.elems[i];
-        if (history.count == 0) continue;
+        NBI_Axis_History *history = &state->axes.elems[i];
+        if (history->count == 0) continue;
 
         // Reserve space for the struct, the device_id string and all elements in the list.
         no_axes++;
         needed_space += sizeof(NB_Axis_History);
-        needed_space += strlen(history.device_id) * sizeof(char);
-        needed_space += history.count * sizeof(history.elems[0]);
+        needed_space += strlen(history->device_id) * sizeof(char);
+        needed_space += history->count * sizeof(history->elems[0]);
     }
 
     noh_arena_reserve(arena, needed_space);
@@ -94,45 +94,46 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     NB_Input_State result = { .pressed_keys = keys_lists, .axes = axis_histories };
 
     // Copy the keys lists.
+    size_t j = 0;
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
-        NBI_Pressed_Keys_List list = state->pressed_keys.elems[i];
-        if (list.count == 0) continue;
+        NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
+        if (list->count == 0) continue;
 
-        size_t data_size = list.count * sizeof(list.elems[0]);
+        size_t data_size = list->count * sizeof(list->elems[0]);
         NB_Pressed_Keys_List new_list = {
-            .count = list.count,
+            .count = list->count,
             .elems = noh_arena_alloc(arena, data_size),
 
-            .device_id = noh_arena_strdup(arena, list.device_id)
+            .device_id = noh_arena_strdup(arena, list->device_id)
         };
-        memcpy(new_list.elems, list.elems, data_size);
-
-        result.pressed_keys.elems[i] = new_list;
+        memcpy(new_list.elems, list->elems, data_size);
+        result.pressed_keys.elems[j++] = new_list;
     }
 
     // Copy the axes.
+    j = 0;
     for (size_t i = 0; i < state->axes.count; i++) {
-        NBI_Axis_History history = state->axes.elems[i];
-        if (history.count == 0) continue;
+        NBI_Axis_History *history = &state->axes.elems[i];
+        if (history->count == 0) continue;
 
-        size_t data_size = history.count * sizeof(history.elems[0]);
+        size_t data_size = history->count * sizeof(history->elems[0]);
         NB_Axis_History new_history = {
-            .count = history.count,
+            .count = history->count,
             .elems = noh_arena_alloc(arena, data_size),
 
-            .current_value = history.current_value,
+            .current_value = history->current_value,
 
-            .min = history.min,
-            .max = history.max,
-            .is_absolute = history.is_absolute,
+            .min = history->min,
+            .max = history->max,
+            .is_absolute = history->is_absolute,
 
-            .device_id = noh_arena_strdup(arena, history.device_id),
-            .axis_id = history.axis_id
+            .device_id = noh_arena_strdup(arena, history->device_id),
+            .axis_id = history->axis_id
 
         };
-        memcpy(new_history.elems, history.elems, data_size);
+        memcpy(new_history.elems, history->elems, data_size);
 
-        result.axes.elems[i] = new_history;
+        result.axes.elems[j++] = new_history;
     }
 
     return result;
@@ -202,13 +203,13 @@ NBI_Axis_History *hooks_define_rel_axis(NBI_Input_State *state, NB_Input_Device 
 
 // Register a keypress or release for the secified device and key.
 // This function assumes a pointer to the relevant pressed keys list is already available.
-void hooks_add_key_(NBI_Pressed_Keys_List *list, uint8 key, bool down) {
+void hooks_add_key_(NBI_Pressed_Keys_List *list, uint16 key, bool down) {
     noh_assert(list);
 
     // Check if the key exists.
     int index = -1;
-    for (size_t i = 0; i < list->count ; i++) {
-        if (list->elems[i] == (uint16)key) {
+    for (size_t i = 0; i < list->count; i++) {
+        if (list->elems[i] == key) {
             index = i;
             break;
         }
@@ -216,7 +217,7 @@ void hooks_add_key_(NBI_Pressed_Keys_List *list, uint8 key, bool down) {
 
     if (down && index < 0) {
         // Add the key.
-        noh_da_append(list, (uint16) key);
+        noh_da_append(list, key);
     } else if (!down && index >= 0) {
         // Remove the key.
         noh_da_remove_at(list, (size_t)index);
@@ -226,11 +227,11 @@ void hooks_add_key_(NBI_Pressed_Keys_List *list, uint8 key, bool down) {
 
 // Register a keypress or release for the secified device and key.
 // This function looks up the pressed keys list by device id.
-void hooks_add_key(NBI_Input_State *state, char *device_id, uint8 key, bool down) {
+void hooks_add_key(NBI_Input_State *state, char *device_id, uint16 key, bool down) {
     noh_assert(state);
     noh_assert(device_id);
 
-    for (size_t i = 0; i < state->pressed_keys.count ; i++) {
+    for (size_t i = 0; i < state->pressed_keys.count; i++) {
         NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
         if (noh_sv_eq(noh_sv_from_cstr(list->device_id), noh_sv_from_cstr(device_id))) {
             hooks_add_key_(list, key, down);
@@ -250,6 +251,8 @@ void hooks_add_abs_value_(NBI_Axis_History *history, const struct timespec *time
     noh_assert(time);
 
     long ms_diff = noh_diff_timespec_ms(&history->last_updated_at, time);
+    if (ms_diff < 1) ms_diff = 1; // FUTURE: Do we need to be more precise with the time differences?
+
     int diff = (value - history->current_value) / ms_diff;
 
     history->last_updated_at = *time;
@@ -265,7 +268,7 @@ void hooks_add_abs_value(NBI_Input_State *state, char *device_id, uint16 axis_id
     noh_assert(state);
     noh_assert(device_id);
 
-    for (size_t i = 0; i < state->axes.count ; i++) {
+    for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
         if (axis_id == history->axis_id
             && noh_sv_eq(noh_sv_from_cstr(history->device_id), noh_sv_from_cstr(device_id))
@@ -297,7 +300,7 @@ void hooks_add_rel_value(NBI_Input_State *state, char *device_id, uint16 axis_id
     noh_assert(state);
     noh_assert(device_id);
 
-    for (size_t i = 0; i < state->axes.count ; i++) {
+    for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
         if (axis_id == history->axis_id
             && noh_sv_eq(noh_sv_from_cstr(history->device_id), noh_sv_from_cstr(device_id))

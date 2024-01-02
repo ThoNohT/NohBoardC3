@@ -100,32 +100,54 @@ bool render_button(char *text, Vector2 position, Vector2 size) {
     return hover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
-void show_keyboard(Noh_Arena *arena, NB_State *state, uint16 **pressed_keys, size_t num_pressed_keys) {
+void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_state) {
     if (IsKeyPressed(KEY_F10)) {
         state->view = NB_MainMenu;
         return;
     }
 
     // Change the background if any key is pressed.
-    if (num_pressed_keys > 0) {
+    size_t num_active_devices = 0;
+    for (size_t i = 0; i < input_state->pressed_keys.count; i++) {
+        NB_Pressed_Keys_List *list = &input_state->pressed_keys.elems[i];
+        if (list->count > 0) num_active_devices++;
+    }
+
+    if (num_active_devices > 0) {
         static Color background_color = CLITERAL(Color){ 20, 20, 20, 255 };
         ClearBackground(background_color);
 
+        int line_spacing = state->screen_size.y / (num_active_devices + 1);
+
+        int offset_y = line_spacing;
         noh_arena_save(arena);
         Noh_String str = {0};
-        for (size_t i = 0; i < num_pressed_keys; i++) {
-            uint16 key = (*pressed_keys)[i];
-            char *keyStr = noh_arena_sprintf(arena, "%hu", key);
-            noh_string_append_cstr(&str, keyStr);
+        for (size_t i = 0; i < input_state->pressed_keys.count; i++) {
+            NB_Pressed_Keys_List *list = &input_state->pressed_keys.elems[i];
+            if (list->count == 0) continue;
 
-            if (i < num_pressed_keys - 1) noh_string_append_cstr(&str, " - ");
+            noh_string_append_cstr(&str, list->device_id);
+            noh_string_append_cstr(&str, ": ");
+            for (size_t i = 0; i < list->count; i++) {
+                uint16 key = list->elems[i];
+                char *keyStr = noh_arena_sprintf(arena, "%hu", key);
+                noh_string_append_cstr(&str, keyStr);
+
+                if (i < list->count - 1) noh_string_append_cstr(&str, " - ");
+            }
+            noh_string_append_null(&str);
+
+            int font_size = 24;
+            Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, str.elems, font_size, 0), .5);
+            Vector2 pos = { .x = state->screen_size.x / 2, .y = offset_y };
+            pos = Vector2Subtract(pos, text_offset);
+            DrawTextEx(nb_font, str.elems, pos, font_size, 0, WHITE);
+
+            offset_y += line_spacing;
+            noh_string_reset(&str);
         }
-        noh_string_append_null(&str);
 
-        Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, str.elems, 120, 0), .5);
-        Vector2 pos = Vector2Subtract(Vector2Scale(state->screen_size, .5), text_offset);
-        DrawTextEx(nb_font, str.elems, pos, 120, 0, WHITE);
-        noh_arena_reset(arena);
+        noh_arena_rewind(arena);
         noh_string_free(&str);
     }
 }
@@ -174,20 +196,12 @@ int main(void)
     while (!WindowShouldClose() && state.running)
     {
         noh_arena_save(&arena);
-        uint16 *pressed_keys;
-        size_t num_pressed_keys = 0;//hooks_get_pressed_kb_keys(&arena, &pressed_keys);
+        NB_Input_State input_state = hooks_get_state(&arena);
 
 #ifdef NB_DEBUG_KEYPRESSES
-        bool any_pressed = num_pressed_keys > 0;
-        if (any_pressed) {
-            noh_string_append_cstr(&str, "- ");
-            for (size_t i = 0; i < num_pressed_keys; i++) {
-                char *line = noh_arena_sprintf(&arena, "%u - ", pressed_keys[i]);
-                noh_string_append_cstr(&str, line);
-            }
-            noh_string_append_null(&str);
-            noh_log(NOH_INFO, str.elems);
-            noh_string_reset(&str);
+        for (size_t i = 0; i < input_state.pressed_keys.count; i++) {
+            NB_Pressed_Keys_List *list = &input_state.pressed_keys.elems[i];
+            noh_log(NOH_INFO, "Device %s: %zu keys.", list->device_id, list->count);
         }
 #endif
 
@@ -199,14 +213,17 @@ int main(void)
                 break;
 
             case NB_ShowKeyboard:
-                show_keyboard(&arena, &state, &pressed_keys, num_pressed_keys);
+                show_keyboard(&arena, &state, &input_state);
                 break;
 
             default:
                 noh_assert(false && "Invalid view.");
                 break;
         }
+
         EndDrawing();
+
+        noh_arena_rewind(&arena);
     }
 
     noh_arena_free(&arena);

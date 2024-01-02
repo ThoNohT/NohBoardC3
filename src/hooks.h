@@ -77,7 +77,6 @@ typedef struct {
 typedef struct {
     NB_Axis_History *elems;
     size_t count; // The number of elements in elems.
-    size_t capacity;
 } NB_Axis_Histories;
 
 // The complete input state.
