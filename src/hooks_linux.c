@@ -218,9 +218,9 @@ defer:
 }
 
 // Lookup a device by the device id, returns null if not found.
-static NB_Input_Device *find_device_by_id(const NB_Input_Devices *devices, char *device_id) {
-    for (size_t i = 0; i < devices->count; i++) {
-        NB_Input_Device *dev = &devices->elems[i];
+NB_Input_Device *hooks_find_device_by_id(char *device_id) {
+    for (size_t i = 0; i < hooks_devices.count; i++) {
+        NB_Input_Device *dev = &hooks_devices.elems[i];
         if (noh_sv_eq(noh_sv_from_cstr(dev->physical_path), noh_sv_from_cstr(device_id)))
             return dev;
     }
@@ -228,10 +228,32 @@ static NB_Input_Device *find_device_by_id(const NB_Input_Devices *devices, char 
     return NULL;
 }
 
+
+#define CLEANUP_INTERVAL 1000
+#define SMOOTH_INTERVAL 100
+
 static void* cleanup() {
     Noh_Arena cleanup_arena = noh_arena_init(2 KB);
+
+    struct timespec last_cleanup = noh_get_time_in(0, 0);
+
     while (running) {
-        struct timespec timeout = noh_get_time_in(5, 0); // Cleanup every second.
+        struct timespec time = noh_get_time_in(0, 0);
+        struct timespec timeout = time;
+        noh_time_add(&timeout, 0, SMOOTH_INTERVAL);
+
+        // Fill relative and absolute histories with zeroes, so they tend back to 0.
+        for (size_t i = 0; i < input_state.axes.count; i++) {
+            NBI_Axis_History *history = &input_state.axes.elems[i];
+            // Add a 0 if the last update was at least half a second before.
+            if (noh_diff_timespec_ms(&history->last_updated_at, &time) > -SMOOTH_INTERVAL) continue;
+
+            // Fill in relative even for absolute, so no absolute value is overwritten.
+            hooks_add_rel_value_(history, &time, 0);
+        }
+
+        if (noh_diff_timespec_ms(&time, &last_cleanup) < CLEANUP_INTERVAL) continue;
+        last_cleanup = noh_get_time_in(0, 0);
 
         // Cleanup pressed keys using load_keymap.
         noh_arena_save(&cleanup_arena);
@@ -241,7 +263,7 @@ static void* cleanup() {
             if (list->count <= 0) continue; // No pressed keys to cleanup.
 
             // There are pressed keys, get a new keymap.
-            NB_Input_Device *dev = find_device_by_id(&hooks_devices, list->device_id);
+            NB_Input_Device *dev = hooks_find_device_by_id(list->device_id);
             if (dev == NULL) continue; // Could not find device.
 
             uint8 *currently_pressed;
@@ -259,16 +281,6 @@ static void* cleanup() {
                     }
                 }
             }
-        }
-
-        // Fill relative and absolute histories with zeroes, so they tend back to 0.
-        struct timespec time = noh_get_time_in(0, 0);
-        for (size_t i = 0; i < input_state.axes.count; i++) {
-            NBI_Axis_History *history = &input_state.axes.elems[i];
-            // Add a 0 if the last update was at least half a second before.
-            if (noh_diff_timespec_ms(&history->last_updated_at, &time) > -500) continue;
-            // Fill in relative even for absolute, so no absolute value is overwritten.
-            hooks_add_rel_value_(history, &time, 0);
         }
 
         pthread_mutex_unlock(&input_mutex);

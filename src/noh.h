@@ -88,6 +88,9 @@ long noh_diff_timespec_ms(const struct timespec *time1, const struct timespec *t
 // Negative values will lead to a time in the past.
 struct timespec noh_get_time_in(int seconds, long milliseconds);
 
+// Adds the specified number of seconds and milliseconds to a timespec.
+void noh_time_add(struct timespec *time, int seconds, long milliseconds);
+
 ///////////////////////// Logging /////////////////////////
 
 // An assert macro that outputs a better format for use with vim's make command.
@@ -415,9 +418,20 @@ struct timespec noh_get_time_in(int seconds, long milliseconds) {
         exit(1);
     }
 
-    time.tv_sec += seconds;
-    time.tv_nsec += milliseconds * 1000 * 1000;
+    noh_time_add(&time, seconds, milliseconds);
     return time;
+}
+
+void noh_time_add(struct timespec *time, int seconds, long milliseconds) {
+    static long ns_per_ms = 1000 * 1000;
+    time->tv_sec += seconds;
+    time->tv_nsec += milliseconds * ns_per_ms;
+
+    // Fix any overflow.
+    if (time->tv_nsec >= 1000 * ns_per_ms) {
+        time->tv_sec += time->tv_nsec / (1000 * ns_per_ms);
+        time->tv_nsec %= 1000 * ns_per_ms;
+    }
 }
 
 ///////////////////////// Logging /////////////////////////  

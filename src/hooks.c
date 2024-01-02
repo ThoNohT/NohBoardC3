@@ -49,7 +49,6 @@ typedef struct {
 
 // Copy the data from an NBI_Input_State to an NB_Input_State, using data from the provided arena.
 // Execute this function in a mutex that prevents modification of state, since it assumes this data to be static.
-// Empty lists or histories will not be copied.
 NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *state) {
     // Determine the space needed.
     size_t needed_space = 0;
@@ -59,7 +58,6 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     // Space for pressed keys.
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
         NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
-        if (list->count == 0) continue;
 
         // Reserve space for the struct, the device_id string and all elements in the list.
         no_keys_lists++;
@@ -71,7 +69,6 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     // Space for axis histories.
     for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
-        if (history->count == 0) continue;
 
         // Reserve space for the struct, the device_id string and all elements in the list.
         no_axes++;
@@ -97,7 +94,6 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     size_t j = 0;
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
         NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
-        if (list->count == 0) continue;
 
         size_t data_size = list->count * sizeof(list->elems[0]);
         NB_Pressed_Keys_List new_list = {
@@ -114,9 +110,9 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     j = 0;
     for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
-        if (history->count == 0) continue;
 
-        size_t data_size = history->count * sizeof(history->elems[0]);
+        int elem_size = sizeof(history->elems[0]);
+        size_t data_size = history->count * elem_size;
         NB_Axis_History new_history = {
             .count = history->count,
             .elems = noh_arena_alloc(arena, data_size),
@@ -131,7 +127,29 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
             .axis_id = history->axis_id
 
         };
-        memcpy(new_history.elems, history->elems, data_size);
+
+        if (history->count < history->capacity) {
+            // Just copy the whole data from 0 to the count.
+            memcpy(new_history.elems, history->elems, data_size);
+        } else {
+            size_t slice_1_count = history->count - history->start;
+            // First slice to the start of the buffer, from the start pointer.
+            if (slice_1_count > 0) {
+                memcpy(
+                    new_history.elems,
+                    history->elems + history->start,
+                    slice_1_count * elem_size);
+            }
+
+            size_t slice_2_count = history->start;
+            // Second slice after the first slice, from the beginning of the original buffer to the start pointer.
+            if (slice_2_count > 0) {
+                memcpy(
+                    new_history.elems + slice_1_count,
+                    history->elems,
+                    slice_2_count * elem_size);
+            }
+        }
 
         result.axes.elems[j++] = new_history;
     }

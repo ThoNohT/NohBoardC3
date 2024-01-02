@@ -106,14 +106,24 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_stat
         return;
     }
 
-    // Change the background if any key is pressed.
     size_t num_active_devices = 0;
     for (size_t i = 0; i < input_state->pressed_keys.count; i++) {
         NB_Pressed_Keys_List *list = &input_state->pressed_keys.elems[i];
         if (list->count > 0) num_active_devices++;
     }
 
+    for (size_t i = 0; i < input_state->axes.count; i++) {
+        NB_Axis_History *history = &input_state->axes.elems[i];
+        for (size_t j = 0 ; j < history->count ; j++) {
+            if (history->elems[j] != 0) {
+                num_active_devices++;
+                break;
+            }
+        }
+    }
+
     if (num_active_devices > 0) {
+        // Change the background if any key is pressed, or any axis is active.
         static Color background_color = CLITERAL(Color){ 20, 20, 20, 255 };
         ClearBackground(background_color);
 
@@ -126,14 +136,17 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_stat
             NB_Pressed_Keys_List *list = &input_state->pressed_keys.elems[i];
             if (list->count == 0) continue;
 
-            noh_string_append_cstr(&str, list->device_id);
+            NB_Input_Device *dev = hooks_find_device_by_id(list->device_id);
+            if (dev == NULL) continue;
+
+            noh_string_append_cstr(&str, dev->name);
             noh_string_append_cstr(&str, ": ");
             for (size_t i = 0; i < list->count; i++) {
                 uint16 key = list->elems[i];
                 char *keyStr = noh_arena_sprintf(arena, "%hu", key);
                 noh_string_append_cstr(&str, keyStr);
 
-                if (i < list->count - 1) noh_string_append_cstr(&str, " - ");
+                if (i < list->count - 1) noh_string_append_cstr(&str, " | ");
             }
             noh_string_append_null(&str);
 
@@ -142,6 +155,51 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_stat
             Vector2 pos = { .x = state->screen_size.x / 2, .y = offset_y };
             pos = Vector2Subtract(pos, text_offset);
             DrawTextEx(nb_font, str.elems, pos, font_size, 0, WHITE);
+
+            offset_y += line_spacing;
+            noh_string_reset(&str);
+        }
+
+        for (size_t i = 0; i < input_state->axes.count; i++) {
+            NB_Axis_History *history = &input_state->axes.elems[i];
+            bool is_active = false;
+            for (size_t j = 0 ; j < history->count ; j++) {
+                if (history->elems[j] != 0) {
+                    is_active = true;
+                    break;
+                }
+            }
+
+            if (!is_active) continue;
+
+            NB_Input_Device *dev = hooks_find_device_by_id(history->device_id);
+            if (dev == NULL) continue;
+
+            char *identifier_str = noh_arena_sprintf(arena, "%s [%hu]: ", dev->name, history->axis_id);
+            noh_string_append_cstr(&str, identifier_str);
+
+            if (history->is_absolute) {
+                char *val_str = noh_arena_sprintf(arena, "%i <= %i <= %i", history->min, history->current_value, history->max);
+                noh_string_append_cstr(&str, val_str);
+            }
+            noh_string_append_cstr(&str, " (");
+            for (size_t i = 0; i < history->count; i++) {
+                int value = history->elems[i];
+                char *hist_str = noh_arena_sprintf(arena, "%i", value);
+                noh_string_append_cstr(&str, hist_str);
+
+                if (i < history->count - 1) noh_string_append_cstr(&str, " | ");
+            }
+            noh_string_append_cstr(&str, ")");
+            noh_string_append_null(&str);
+
+            int font_size = 24;
+            Vector2 text_offset = Vector2Scale(MeasureTextEx(nb_font, str.elems, font_size, 0), .5);
+            Vector2 pos = { .x = 10, .y = offset_y };
+            pos.y -= text_offset.y;
+            Color color = RED;
+            if (history->is_absolute) color = GREEN;
+            DrawTextEx(nb_font, str.elems, pos, font_size, 0, color);
 
             offset_y += line_spacing;
             noh_string_reset(&str);

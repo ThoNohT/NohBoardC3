@@ -101,4 +101,7 @@ bool hooks_reinitialize();
 // Shutdown hooks and stop listening to input events.
 void hooks_shutdown();
 
+// Finds the device with the specified id, returns null if no such device is known.
+NB_Input_Device *hooks_find_device_by_id(char *device_id);
+
 #endif // HOOKS_H_
