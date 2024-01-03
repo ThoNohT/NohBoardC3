@@ -12,7 +12,13 @@
 #include <ctype.h>
 #include <stdarg.h>
 #include <time.h>
-#include <sys/stat.h>
+
+#ifdef _WIN32
+   #include <direct.h>
+#else
+    #include <sys/stat.h>
+#endif // _WIN32
+
 
 ///////////////////////// Number definitions /////////////////////////
 
@@ -142,17 +148,17 @@ do {                                                                            
 } while (0)
 
 // Removes the element at the specified location.
-#define noh_da_remove_at(da, index)                                          \
-do {                                                                         \
-    noh_assert((index) < (da)->count && (index) >= 0 && "Index out of bounds."); \
-    (da)->count -= 1;                                                        \
-    if ((index) < (da)->count) {                                             \
-        size_t elem_size = sizeof(*(da)->elems);                             \
-        memmove(                                                             \
-            (void*)(da)->elems + (index) * elem_size,                        \
-            (void*)(da)->elems + ((index) + 1) * elem_size,                  \
-            ((da)->count - (index)) * elem_size);                            \
-    }                                                                        \
+#define noh_da_remove_at(da, index)                              \
+do {                                                             \
+    noh_assert((index) < (da)->count && "Index out of bounds."); \
+    (da)->count -= 1;                                            \
+    if ((index) < (da)->count) {                                 \
+        size_t elem_size = sizeof(*(da)->elems);                 \
+        memmove(                                                 \
+            (void*)(da)->elems + (index) * elem_size,            \
+            (void*)(da)->elems + ((index) + 1) * elem_size,      \
+            ((da)->count - (index)) * elem_size);                \
+    }                                                            \
 } while (0)
 
 // Frees the elements in a dynamic array, and resets the count and capacity.
@@ -828,7 +834,11 @@ const char *noh_sv_to_arena_cstr(Noh_Arena *arena, Noh_String_View sv)
 ///////////////////////// Files and directories /////////////////////////
 
 bool noh_mkdir_if_needed(const char *path) {
+#ifdef _WIN32
+    int result = mkdir(path);
+#else
     int result = mkdir(path, 0755);
+#endif // _WIN32
 
     if (result == 0) {
         noh_log(NOH_INFO, "Created directory '%s'.", path);

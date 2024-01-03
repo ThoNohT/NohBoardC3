@@ -5,6 +5,12 @@
 
 #define RAYLIB_PATH "./raylib-5.0"
 
+#ifdef _WIN32
+    #define NOH_COMPILER "gcc"
+#else
+    #define NOH_COMPILER "clang"
+#endif // _WIN32
+
 bool build_nohboard() {
     bool result = true;
     Noh_Arena arena = noh_arena_init(10 KB);
@@ -14,7 +20,11 @@ bool build_nohboard() {
     noh_da_append(&input_paths, "./src/noh.h");
     noh_da_append(&input_paths, "./src/main.c");
     noh_da_append(&input_paths, "./src/hooks.c");
+#ifdef _WIN32
+    noh_da_append(&input_paths, "./src/hooks_windows.c");
+#else
     noh_da_append(&input_paths, "./src/hooks_linux.c");
+#endif // _WIN32
     noh_da_append(&input_paths, "./src/hooks.h");
     noh_da_append(&input_paths, "./build/raylib/libraylib.a");
 
@@ -25,7 +35,7 @@ bool build_nohboard() {
         noh_return_defer(true);
     }
 
-    noh_cmd_append(&cmd, "clang");
+    noh_cmd_append(&cmd, NOH_COMPILER);
 
     // c-flags
     noh_cmd_append(&cmd, "-Wall", "-Wextra", "-ggdb");
@@ -38,11 +48,20 @@ bool build_nohboard() {
 
     // Source
     noh_cmd_append(&cmd, "./src/main.c");
-    noh_cmd_append(&cmd, "./src/hooks_linux.c");
+#ifdef _WIN32
+    noh_da_append(&cmd, "./src/hooks_windows.c");
+#else
+    noh_da_append(&cmd, "./src/hooks_linux.c");
+#endif // _WIN32
 
     // Linker
-    noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread", "-lrt");
     noh_cmd_append(&cmd, "-L./build/raylib", "-l:libraylib.a");
+#ifdef _WIN32
+    noh_cmd_append(&cmd, "-lm", "-lwinmm", "-lgdi32");
+    noh_cmd_append(&cmd, "-static");
+#else
+    noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread", "-lrt");
+#endif // _WIN32
 
     if (!noh_cmd_run_sync(cmd)) noh_return_defer(false);
 
@@ -76,15 +95,15 @@ bool build_raylib() {
 
         updated = true;
 
-        noh_cmd_append(&cmd, "clang");
+        noh_cmd_append(&cmd, NOH_COMPILER);
         noh_cmd_append(&cmd, "-Wno-everything"); // We don't care about warnings in the raylib source.
         noh_cmd_append(&cmd, "-ggdb", "-DPLATFORM_DESKTOP");
-        char *glfw_include_path = noh_arena_sprintf(&arena, "-I%/src/external/glfw/include", RAYLIB_PATH);
+        char *glfw_include_path = noh_arena_sprintf(&arena, "-I%s/src/external/glfw/include", RAYLIB_PATH);
         noh_cmd_append(&cmd, glfw_include_path);
         noh_cmd_append(&cmd, "-c", source_path);
         noh_cmd_append(&cmd, "-o", output_path);
 
-        pid_t pid = noh_cmd_run_async(cmd);
+        Noh_Pid pid = noh_cmd_run_async(cmd);
         noh_da_append(&procs, pid);
 
         cmd.count = 0;

@@ -6,21 +6,40 @@
 #ifndef NOH_BLD_H_
 #define NOH_BLD_H_
 
-#include <unistd.h>
-#include <sys/wait.h>
-#include <sys/stat.h>
+
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #define _WINUSER_
+    #define _WINGDI_
+    #define _IMM_
+    #define _WINCON_
+    #include <windows.h>
+#else
+    #include <unistd.h>
+    #include <sys/wait.h>
+    #include <sys/stat.h>
+#endif // _WIN32
 
 ///////////////////////// Processes /////////////////////////
 
+// Process identifiers.
+#ifdef _WIN32
+    typedef HANDLE Noh_Pid;
+    #define NOH_INVALID_PROC INVALID_HANDLE_VALUE
+#else
+    typedef pid_t Noh_Pid;
+    #define NOH_INVALID_PROC (-1)
+#endif // _WIN32
+
 // A collection of processes.
 typedef struct {
-    pid_t *elems;
+    Noh_Pid *elems;
     size_t count;
     size_t capacity;
 } Noh_Procs;
 
 // Waits for a single process.
-bool noh_proc_wait(pid_t pid);
+bool noh_proc_wait(Noh_Pid pid);
 
 // Waits for a collection of processes.
 bool noh_procs_wait(Noh_Procs procs);
@@ -53,7 +72,7 @@ noh_da_append_multiple(          \
 #define noh_cmd_reset(cmd) noh_da_reset(cmd)
 
 // Runs a command asynchronously and returns the process id.
-pid_t noh_cmd_run_async(Noh_Cmd cmd);
+Noh_Pid noh_cmd_run_async(Noh_Cmd cmd);
 
 // Runs a command synchronously.
 bool noh_cmd_run_sync(Noh_Cmd cmd);
@@ -108,10 +127,31 @@ int noh_output_is_older(const char *output_path, char **input_paths, size_t inpu
 
 ///////////////////////// Processes /////////////////////////
 
-bool noh_proc_wait(pid_t pid)
+bool noh_proc_wait(Noh_Pid pid)
 {
-    if (pid == -1) return false;
+    if (pid == NOH_INVALID_PROC) return false;
 
+#ifdef _WIN32
+    DWORD result = WaitForSingleObject(pid, INFINITE);
+
+    if (result == WAIT_FAILED) {
+        noh_log(NOH_ERROR, "Could not wait for command: %lu", GetLastError());
+        return false;
+    }
+
+    DWORD exit_status;
+    if (!GetExitCodeProcess(pid, &exit_status)) {
+        noh_log(NOH_ERROR, "Could not get command exit code: %lu", GetLastError());
+        return false;
+    }
+
+    if (exit_status != 0) {
+        noh_log(NOH_ERROR, "Command exited with exit code %lu", exit_status);
+        return false;
+    }
+
+    CloseHandle(pid);
+#else
     for (;;) {
         int wstatus = 0;
         if (waitpid(pid, &wstatus, 0) < 0) {
@@ -135,6 +175,7 @@ bool noh_proc_wait(pid_t pid)
         }
     }
 
+#endif // _WIN32
     return true;
 }
 
@@ -169,10 +210,10 @@ void noh_cmd_render(Noh_Cmd cmd, Noh_String *string) {
     }
 }
 
-pid_t noh_cmd_run_async(Noh_Cmd cmd) {
+Noh_Pid noh_cmd_run_async(Noh_Cmd cmd) {
     if (cmd.count < 1) {
         noh_log(NOH_ERROR, "Cannot run an empty command.");
-        return -1;
+        return NOH_INVALID_PROC;
     }
 
     // Log the command.
@@ -180,12 +221,41 @@ pid_t noh_cmd_run_async(Noh_Cmd cmd) {
     noh_cmd_render(cmd, &sb);
     noh_da_append(&sb, '\0');
     noh_log(NOH_INFO, "CMD: %s", sb.elems);
+
+#ifdef _WIN32
+    noh_string_reset(&sb);
+
+    // https://learn.microsoft.com/en-us/windows/win32/procthread/creating-a-child-process-with-redirected-input-and-output
+    STARTUPINFO suInfo;
+    ZeroMemory(&suInfo, sizeof(STARTUPINFO));
+    suInfo.cb = sizeof(STARTUPINFO);
+    suInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    suInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    suInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    suInfo.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION procInfo;
+    ZeroMemory(&procInfo, sizeof(PROCESS_INFORMATION));
+
+    noh_cmd_render(cmd, &sb);
+    noh_string_append_null(&sb);
+    bool success = CreateProcessA(NULL, sb.elems, NULL, NULL, true, 0, NULL, NULL, &suInfo, &procInfo);
     noh_string_free(&sb);
 
-    pid_t cpid = fork();
+    if (!success) {
+        noh_log(NOH_ERROR, "Could not create child process: %lu", GetLastError());
+        return NOH_INVALID_PROC;
+    }
+
+    CloseHandle(procInfo.hThread);
+    return procInfo.hProcess;
+#else
+    noh_string_free(&sb);
+
+    Noh_Pid cpid = fork();
     if (cpid < 0) {
         noh_log(NOH_ERROR, "Could not fork child process: %s", strerror(errno));
-        return -1;
+        return NOH_INVALID_PROC;
     }
 
     if (cpid == 0) {
@@ -204,11 +274,12 @@ pid_t noh_cmd_run_async(Noh_Cmd cmd) {
     }
 
     return cpid;
+#endif // _WIN32
 }
 
 bool noh_cmd_run_sync(Noh_Cmd cmd) {
-    pid_t pid = noh_cmd_run_async(cmd);
-    if (pid == -1) return false;
+    Noh_Pid pid = noh_cmd_run_async(cmd);
+    if (pid == NOH_INVALID_PROC) return false;
 
     return noh_proc_wait(pid);
 }
@@ -216,6 +287,44 @@ bool noh_cmd_run_sync(Noh_Cmd cmd) {
 ///////////////////////// Building /////////////////////////
 
 int noh_output_is_older(const char *output_path, char **input_paths, size_t input_paths_count) {
+#ifdef _WIN32
+    bool success;
+    HANDLE output_path_fd = CreateFile(output_path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+    if (output_path_fd == INVALID_HANDLE_VALUE) {
+        if (GetLastError() == ERROR_FILE_NOT_FOUND) return 1; // The output path doesn't exist, consider that older.
+        noh_log(NOH_ERROR, "Could not open file '%s': %lu", output_path, GetLastError());
+        return -1;
+    }
+    
+    FILETIME output_path_time;
+    success = GetFileTime(output_path_fd, NULL, NULL, &output_path_time);
+    CloseHandle(output_path_fd);
+    if (!success) {
+        noh_log(NOH_ERROR, "Could not get file time of file '%s': %lu", output_path, GetLastError());
+        return -1;
+    }
+
+    for (size_t i = 0; i < input_paths_count; i++) {
+        HANDLE input_path_fd = CreateFile(input_paths[i], GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, NULL);
+        if (input_path_fd == INVALID_HANDLE_VALUE) {
+            // Non-existent input path means a source file does not exist, fail.
+            noh_log(NOH_ERROR, "Could not open file '%s': %lu", input_paths[i], GetLastError());
+            return -1;
+        }
+
+        FILETIME input_path_time;
+        success = GetFileTime(input_path_fd, NULL, NULL, &input_path_time);
+        if (!success) {
+            noh_log(NOH_ERROR, "Could not get file time of file '%s': %lu", input_paths[i], GetLastError());
+            return -1;
+        }
+
+        // Any newer source file means the output is older.
+        if (CompareFileTime(&input_path_time, &output_path_time) == 1) return 1;
+    }
+
+    return 0;
+#else
     struct stat statbuf = {0};
 
     if (stat(output_path, &statbuf) < 0) {
@@ -238,6 +347,7 @@ int noh_output_is_older(const char *output_path, char **input_paths, size_t inpu
     }
 
     return 0;
+#endif // _WIN32
 }
 
 #endif // NOH_BLD_IMPLEMENTATION
