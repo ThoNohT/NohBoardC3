@@ -300,8 +300,11 @@ static void* cleanup() {
 void hooks_shutdown() {
     running = false;
     sem_post(&cleanup_sem);
+
     pthread_join(cleanup_thread, NULL);
     pthread_join(run_thread, NULL);
+
+    noh_da_free(&hooks_devices);
 }
 
 // Helper to fill in the list of known devices.
@@ -488,6 +491,7 @@ bool hooks_initialize() {
     }
 
     // (Re)initialize the devices.
+    memset(&hooks_devices, 0, sizeof(hooks_devices));
     if (!init_devices(&hooks_arena, &hooks_devices)) {
         return false;
     }
