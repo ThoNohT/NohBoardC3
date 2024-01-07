@@ -18,6 +18,7 @@ typedef enum {
 typedef struct {
     NB_Input_Device_Type type;
 
+    size_t index; // The index in the list NB_Input_Devices, so it can be used for looking up this device.
     int fd;
     char *path;
     char *name;
@@ -45,7 +46,7 @@ typedef struct {
     uint16 *elems; // The key codes of the currently pressed keys.
     size_t count; // The number of elements in elems.
 
-    char *device_id; // A unique identifier for the device for which the pressed keys are recorded. 
+    size_t device_index; // Index of the device in the devices list for which the pressed keys are recorded.
 } NB_Pressed_Keys_List;
 
 // A list of lists of pressed keys, one per device. Every device has only one list of pressed keys.
@@ -67,7 +68,7 @@ typedef struct {
     int max; // The maximum value of this axis. Always 0 for relative axes.
     bool is_absolute; // True when absolute, false when relative.
 
-    char *device_id; // A unique identifier for the device for which the history is recorded.
+    size_t device_index; // Index in the list of devices of the device for which the history is recorded.
     uint16 axis_id; // The identifier of the axis for which the history is recorded.
 } NB_Axis_History;
 
@@ -101,7 +102,7 @@ bool hooks_reinitialize();
 // Shutdown hooks and stop listening to input events.
 void hooks_shutdown();
 
-// Finds the device with the specified id, returns null if no such device is known.
-NB_Input_Device *hooks_find_device_by_id(char *device_id);
+// Finds the device with the specified index, returns null if there is no device at this index.
+NB_Input_Device *hooks_find_device_by_index(size_t device_index);
 
 #endif // HOOKS_H_

@@ -136,7 +136,7 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_stat
             NB_Pressed_Keys_List *list = &input_state->pressed_keys.elems[i];
             if (list->count == 0) continue;
 
-            NB_Input_Device *dev = hooks_find_device_by_id(list->device_id);
+            NB_Input_Device *dev = hooks_find_device_by_index(list->device_index);
             if (dev == NULL) continue;
 
             noh_string_append_cstr(&str, dev->name);
@@ -172,7 +172,7 @@ void show_keyboard(Noh_Arena *arena, NB_State *state, NB_Input_State *input_stat
 
             if (!is_active) continue;
 
-            NB_Input_Device *dev = hooks_find_device_by_id(history->device_id);
+            NB_Input_Device *dev = hooks_find_device_by_index(history->device_index);
             if (dev == NULL) continue;
 
             char *identifier_str = noh_arena_sprintf(arena, "%s [%hu]: ", dev->name, history->axis_id);
@@ -259,7 +259,7 @@ int main(void)
 #ifdef NB_DEBUG_KEYPRESSES
         for (size_t i = 0; i < input_state.pressed_keys.count; i++) {
             NB_Pressed_Keys_List *list = &input_state.pressed_keys.elems[i];
-            noh_log(NOH_INFO, "Device %s: %zu keys.", list->device_id, list->count);
+            noh_log(NOH_INFO, "Device %zu: %zu keys.", list->device_index, list->count);
         }
 #endif
 

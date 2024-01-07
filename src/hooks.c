@@ -8,7 +8,7 @@ typedef struct {
     size_t count;
     size_t capacity;
 
-    char *device_id;
+    size_t device_index;
 } NBI_Pressed_Keys_List;
 
 typedef struct {
@@ -32,7 +32,7 @@ typedef struct {
     int max;
     bool is_absolute;
 
-    char *device_id;
+    size_t device_index;
     uint16 axis_id;
 } NBI_Axis_History;
 
@@ -59,10 +59,9 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
         NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
 
-        // Reserve space for the struct, the device_id string and all elements in the list.
+        // Reserve space for the struct and all elements in the list.
         no_keys_lists++;
         needed_space += sizeof(NB_Pressed_Keys_List);
-        needed_space += strlen(list->device_id) * sizeof(char);
         needed_space += list->count * sizeof(list->elems[0]);
     }
 
@@ -70,10 +69,9 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
     for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
 
-        // Reserve space for the struct, the device_id string and all elements in the list.
+        // Reserve space for the struct and all elements in the list.
         no_axes++;
         needed_space += sizeof(NB_Axis_History);
-        needed_space += strlen(history->device_id) * sizeof(char);
         needed_space += history->count * sizeof(history->elems[0]);
     }
 
@@ -100,7 +98,7 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
             .count = list->count,
             .elems = noh_arena_alloc(arena, data_size),
 
-            .device_id = noh_arena_strdup(arena, list->device_id)
+            .device_index = list->device_index
         };
         memcpy(new_list.elems, list->elems, data_size);
         result.pressed_keys.elems[j++] = new_list;
@@ -123,7 +121,7 @@ NB_Input_State copy_nbi_state_to_nb_state(Noh_Arena *arena, NBI_Input_State *sta
             .max = history->max,
             .is_absolute = history->is_absolute,
 
-            .device_id = noh_arena_strdup(arena, history->device_id),
+            .device_index = history->device_index,
             .axis_id = history->axis_id
 
         };
@@ -166,7 +164,7 @@ NBI_Pressed_Keys_List *hooks_define_key_list(NBI_Input_State *state, NB_Input_De
         .elems = NULL,
         .count = 0,
         .capacity = 0,
-        .device_id = dev->physical_path
+        .device_index = dev->index
     };
 
     noh_da_append(&state->pressed_keys, list);
@@ -188,7 +186,7 @@ NBI_Axis_History *hooks_define_abs_axis(NBI_Input_State *state, NB_Input_Device 
         .max = maximum,
         .is_absolute = true,
 
-        .device_id = dev->physical_path,
+        .device_index = dev->index,
         .axis_id = axis_id
     };
     noh_cb_initialize(&history, NB_INPUT_SMOOTH);
@@ -210,7 +208,7 @@ NBI_Axis_History *hooks_define_rel_axis(NBI_Input_State *state, NB_Input_Device 
 
         .is_absolute = false,
 
-        .device_id = dev->physical_path,
+        .device_index = dev->index,
         .axis_id = axis_id
     };
     noh_cb_initialize(&history, NB_INPUT_SMOOTH);
@@ -244,21 +242,20 @@ void hooks_add_key_(NBI_Pressed_Keys_List *list, uint16 key, bool down) {
 }
 
 // Register a keypress or release for the secified device and key.
-// This function looks up the pressed keys list by device id.
-void hooks_add_key(NBI_Input_State *state, char *device_id, uint16 key, bool down) {
+// This function looks up the pressed keys list by device index.
+void hooks_add_key(NBI_Input_State *state, size_t device_index, uint16 key, bool down) {
     noh_assert(state);
-    noh_assert(device_id);
 
     for (size_t i = 0; i < state->pressed_keys.count; i++) {
         NBI_Pressed_Keys_List *list = &state->pressed_keys.elems[i];
-        if (noh_sv_eq(noh_sv_from_cstr(list->device_id), noh_sv_from_cstr(device_id))) {
+        if (list->device_index == device_index) {
             hooks_add_key_(list, key, down);
             return;
         }
     }
 
     // The list was not found, log a warning.
-    noh_log(NOH_WARNING, "Could not find key list of device %s for entering keypress.", device_id);
+    noh_log(NOH_WARNING, "Could not find key list of device %zu for entering keypress.", device_index);
 }
 
 // Add a new absolute value to an axis history.
@@ -281,23 +278,20 @@ void hooks_add_abs_value_(NBI_Axis_History *history, const struct timespec *time
 
 // Add a new absolute value to an axis history.
 // Updates the value and pushes into the circular history buffer.
-// This function looks up the axis history by device id and axis id.
-void hooks_add_abs_value(NBI_Input_State *state, char *device_id, uint16 axis_id, const struct timespec *time, int value) {
+// This function looks up the axis history by device index and axis id.
+void hooks_add_abs_value(NBI_Input_State *state, size_t device_index, uint16 axis_id, const struct timespec *time, int value) {
     noh_assert(state);
-    noh_assert(device_id);
 
     for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
-        if (axis_id == history->axis_id
-            && noh_sv_eq(noh_sv_from_cstr(history->device_id), noh_sv_from_cstr(device_id))
-            && history->is_absolute) {
+        if (axis_id == history->axis_id && history->device_index == device_index && history->is_absolute) {
             hooks_add_abs_value_(history, time, value);
             return;
         }
     }
 
     // The axis was not found, log a warning.
-    noh_log(NOH_WARNING, "Could not find axis %hu of device %s for entering abs value.", axis_id, device_id);
+    noh_log(NOH_WARNING, "Could not find axis %hu of device %zu for entering abs value.", axis_id, device_index);
 }
 
 // Add a new relative value to an axis history. Does not update the absolute value.
@@ -313,21 +307,18 @@ void hooks_add_rel_value_(NBI_Axis_History *history, const struct timespec *time
 
 // Add a new relative value to an axis history. Does not update the absolute value.
 // Can still be used for an absolute value when pushing 0s to revert the relative history to 0.
-// This function looks up the axis history by device id and axis id.
-void hooks_add_rel_value(NBI_Input_State *state, char *device_id, uint16 axis_id, const struct timespec *time, int value) {
+// This function looks up the axis history by device index and axis id.
+void hooks_add_rel_value(NBI_Input_State *state, size_t device_index, uint16 axis_id, const struct timespec *time, int value) {
     noh_assert(state);
-    noh_assert(device_id);
 
     for (size_t i = 0; i < state->axes.count; i++) {
         NBI_Axis_History *history = &state->axes.elems[i];
-        if (axis_id == history->axis_id
-            && noh_sv_eq(noh_sv_from_cstr(history->device_id), noh_sv_from_cstr(device_id))
-            && !history->is_absolute) {
+        if (axis_id == history->axis_id && history->device_index == device_index && !history->is_absolute) {
             hooks_add_rel_value_(history, time, value);
             return;
         }
     }
 
     // The axis was not found, log a warning.
-    noh_log(NOH_WARNING, "Could not find axis %hu of device %s for entering rel value.", axis_id, device_id);
+    noh_log(NOH_WARNING, "Could not find axis %hu of device %zu for entering rel value.", axis_id, device_index);
 }

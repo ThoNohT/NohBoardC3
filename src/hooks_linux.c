@@ -168,14 +168,14 @@ static void *run() {
                         }
 
                         pthread_mutex_lock(&input_mutex);
-                        hooks_add_key(&input_state, dev->physical_path, event.code, event.value == 1);
+                        hooks_add_key(&input_state, dev->index, event.code, event.value == 1); 
                         pthread_mutex_unlock(&input_mutex);
                         break;
                     case EV_ABS:
                         {
                             struct timespec tim = noh_get_time_in(0, 0);
                             pthread_mutex_lock(&input_mutex);
-                            hooks_add_abs_value(&input_state, dev->physical_path, event.code, &tim, event.value);
+                            hooks_add_abs_value(&input_state, dev->index, event.code, &tim, event.value);
                             pthread_mutex_unlock(&input_mutex);
                             break;
                         }
@@ -187,7 +187,7 @@ static void *run() {
 
                         struct timespec time = noh_get_time_in(0, 0);
                         pthread_mutex_lock(&input_mutex);
-                        hooks_add_rel_value(&input_state, dev->physical_path, event.code, &time, event.value);
+                        hooks_add_rel_value(&input_state, dev->index, event.code, &time, event.value);
                         pthread_mutex_unlock(&input_mutex);
                         break;
                     default:
@@ -217,15 +217,10 @@ defer:
     pthread_exit(NULL);
 }
 
-// Lookup a device by the device id, returns null if not found.
-NB_Input_Device *hooks_find_device_by_id(char *device_id) {
-    for (size_t i = 0; i < hooks_devices.count; i++) {
-        NB_Input_Device *dev = &hooks_devices.elems[i];
-        if (noh_sv_eq(noh_sv_from_cstr(dev->physical_path), noh_sv_from_cstr(device_id)))
-            return dev;
-    }
-
-    return NULL;
+// Find the device at the specified index, returns NULL if out of bounds.
+NB_Input_Device *hooks_find_device_by_index(size_t device_index) {
+    if (device_index >= hooks_devices.count) return NULL;
+    return &hooks_devices.elems[device_index];
 }
 
 
@@ -263,7 +258,7 @@ static void* cleanup() {
             if (list->count <= 0) continue; // No pressed keys to cleanup.
 
             // There are pressed keys, get a new keymap.
-            NB_Input_Device *dev = hooks_find_device_by_id(list->device_id);
+            NB_Input_Device *dev = hooks_find_device_by_index(list->device_index);
             if (dev == NULL) continue; // Could not find device.
 
             uint8 *currently_pressed;
@@ -384,6 +379,7 @@ static bool init_devices(Noh_Arena *arena, NB_Input_Devices *devices) {
         if (noh_sv_contains_ci(noh_sv_from_cstr(device.name), noh_sv_from_cstr("touchpad")))
             device.type = NB_Touchpad;
 
+        device.index = devices->count; // The current count will be the index of this device.
         noh_da_append(devices, device);
     }
 
