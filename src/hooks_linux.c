@@ -366,11 +366,11 @@ static bool init_devices(Noh_Arena *arena, NB_Input_Devices *devices) {
         }
 
         NB_Input_Device device = {0};
-        device.type = NB_Unknown;
+        device.type = NB_Unknown_Device;
         device.fd = fd;
         device.path = noh_arena_strdup(arena, device_path.elems);
         device.name = name;
-        device.physical_path = phys;
+        device.unique_id = phys; // Use the physical path as a unique identifier.
 
         // Try to determine the device type based on the name.
         // Later we can use key and relative events to add another way to determine.

@@ -1,28 +1,56 @@
 #ifndef HOOKS_H_
 #define HOOKS_H_
 
+#ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+    #define _WINUSER_
+    #define _WINGDI_
+    #define _IMM_
+    #define _WINCON_
+    #include <windows.h>
+
+// Not including winuser.h leaves this type unknown, let's copy its definition.
+    typedef struct tagMSG {
+        HWND hwnd;
+        UINT message;
+        WPARAM wParam;
+        LPARAM lParam;
+        DWORD time;
+        POINT pt;
+    } MSG,*PMSG,*NPMSG,*LPMSG;
+
+    #include <dinput.h>
+
+#endif // _WIN32
+
 #define NB_INPUT_SMOOTH 5
 
 ///////////////////////// Input devices /////////////////////////
 
 // The different recognized types of devices.
 typedef enum {
-    NB_Unknown,
+    NB_Unknown_Device,
     NB_Keyboard,
     NB_Mouse,
-    NB_Touchpad
+    NB_Touchpad,
+    NB_Joystick
 } NB_Input_Device_Type;
 
 // Information about a specific input device.
-// FUTURE: This type is not cross platform.
 typedef struct {
     NB_Input_Device_Type type;
 
     size_t index; // The index in the list NB_Input_Devices, so it can be used for looking up this device.
+    char *name;
+    char *unique_id; // Either the physical path on Linux, or a string representation of the GUID on Windows.
+// TODO *: Hide these platform specific fields?
+#ifdef _WIN32
+    GUID guid;
+    LPDIRECTINPUTDEVICE instance;
+#else
     int fd;
     char *path;
-    char *name;
-    char *physical_path;
+#endif // _WIN32
 } NB_Input_Device;
 
 // A list of input devices.

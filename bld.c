@@ -57,7 +57,7 @@ bool build_nohboard() {
     // Linker
     noh_cmd_append(&cmd, "-L./build/raylib", "-l:libraylib.a");
 #ifdef _WIN32
-    noh_cmd_append(&cmd, "-lm", "-lwinmm", "-lgdi32");
+    noh_cmd_append(&cmd, "-lm", "-lwinmm", "-lgdi32", "-ldinput8", "-ldxguid");
     noh_cmd_append(&cmd, "-static");
 #else
     noh_cmd_append(&cmd, "-lm", "-ldl", "-lpthread", "-lrt");

@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "hooks.h": "c",
+        "windows.h": "c",
+        "sdkddkver.h": "c",
+        "dinput.h": "c"
+    }
+}

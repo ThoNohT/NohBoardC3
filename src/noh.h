@@ -42,9 +42,11 @@
 #define uint unsigned int
 #endif
 
+#ifndef _WIN32
 #ifndef int64
 #define int64 long
 #endif
+#endif 
 
 #ifndef uint64
 #define uint64 unsigned long
