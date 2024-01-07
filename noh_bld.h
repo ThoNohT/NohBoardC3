@@ -82,6 +82,13 @@ void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
 
 ///////////////////////// Building /////////////////////////
 
+#ifdef _WIN32
+bool noh_bld_exit_on_rebuild_fail = true;
+#else
+bool noh_bld_exit_on_rebuild_fail = false;
+#endif // _WIN32
+
+
 // Call this macro at the start of a build script. It will check if the source file is newer than the executable
 // that is running, and if so, rebuild the source and call the new executable.
 #define noh_rebuild_if_needed(argc, argv)                                               \
@@ -93,6 +100,10 @@ void noh_cmd_render(Noh_Cmd cmd, Noh_String *string);
         int rebuild_needed = noh_output_is_older(binary_path, (char**)&source_path, 1); \
         if (rebuild_needed < 0) exit(1);                                                \
         if (rebuild_needed) {                                                           \
+            if (noh_bld_exit_on_rebuild_fail) {                                         \
+                noh_log(NOH_ERROR, "Build script needs to be recompiled.");             \
+                exit(27);                                                               \
+            }                                                                           \
             Noh_String backup_path = {0};                                               \
             noh_string_append_cstr(&backup_path, binary_path);                          \
             noh_string_append_cstr(&backup_path, ".old");                               \
