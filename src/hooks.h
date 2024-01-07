@@ -27,6 +27,26 @@
 
 ///////////////////////// Input devices /////////////////////////
 
+// Device object enumeration is only relvant for Windows, using DirectInput.
+#ifdef _WIN32
+typedef struct {
+    size_t offset;
+    DWORD org_offset; // To check against previously seen devices, not for our offset.
+    char *name; // The name of this object.
+    DWORD type;
+    uint16 instance;
+} NB_Device_Object_Info;
+
+typedef struct {
+    NB_Device_Object_Info *elems;
+    size_t count;
+    size_t capacity;
+
+    DWORD type; // Implementation detail: the type of objects being enumerated.
+    size_t data_size; // The total data size of all device objects in this list.
+} NB_Device_Object_Infos;
+#endif //_WIN32
+
 // The different recognized types of devices.
 typedef enum {
     NB_Unknown_Device,
@@ -43,10 +63,12 @@ typedef struct {
     size_t index; // The index in the list NB_Input_Devices, so it can be used for looking up this device.
     char *name;
     char *unique_id; // Either the physical path on Linux, or a string representation of the GUID on Windows.
+
 // TODO *: Hide these platform specific fields?
 #ifdef _WIN32
     GUID guid;
     LPDIRECTINPUTDEVICE instance;
+    NB_Device_Object_Infos objects;
 #else
     int fd;
     char *path;
