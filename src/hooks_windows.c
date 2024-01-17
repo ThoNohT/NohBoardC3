@@ -80,6 +80,12 @@ NB_Input_Device *hooks_find_device_by_index(size_t device_index) {
     return (NB_Input_Device *)NULL;
 }
 
+static int align_offset(size_t cur_offset, DWORD type) {
+    size_t data_size = device_object_data_size(type);
+    size_t rem = cur_offset % data_size;
+    return cur_offset + rem;
+}
+
 static int add_device_object(LPCDIDEVICEOBJECTINSTANCE lpddoi, LPVOID pvRef) {
     NB_Device_Object_Infos *dev_objs = (NB_Device_Object_Infos *)pvRef;
 
@@ -91,7 +97,9 @@ static int add_device_object(LPCDIDEVICEOBJECTINSTANCE lpddoi, LPVOID pvRef) {
     NB_Device_Object_Info info = {0};
     info.type = dev_objs->type; // Set the type with which we are enumerating, we don't care about the exact type.
     info.org_offset = lpddoi->dwOfs; // The offset to check for duplicates against.
-    info.offset = dev_objs->data_size; // The offset is the current data size.
+    // The offset is the current data size, aligned to the required size.
+    info.offset = align_offset(dev_objs->data_size, dev_objs->type);
+    dev_objs->data_size = info.offset; // After aligning the data, also reflect this in dev_objs.
     info.name = noh_arena_strdup(&hooks_arena, lpddoi->tszName);
     dev_objs->data_size += device_object_data_size(info.type); // Increment the data size so this object fits.
     // Determine the exact instance of this button so we can refer to it later.
