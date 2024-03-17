@@ -187,7 +187,6 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
     if (dev_objs.count == 0) {
         noh_log(NOH_INFO, "Device %s has no relevant objects, skipping.", device.name);
         return DIENUM_CONTINUE;
-
     }
 
     // Apparently we need to specify globally whether we want to set the axes in absolute mode, so if we found
@@ -205,10 +204,10 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
     for (size_t i = 0; i < dev_objs.count; i++) {
         NB_Device_Object_Info *obj_info = &dev_objs.elems[i];
         DIOBJECTDATAFORMAT obj_format = {
-            .pguid = NULL,
+            .pguid = 0,
             .dwOfs = obj_info->offset,
-            .dwType = obj_info->type,
-            .dwFlags = DIDFT_MAKEINSTANCE(obj_info->instance)
+            .dwType = DIDFT_MAKEINSTANCE(obj_info->instance),
+            .dwFlags = 0
         };
 
         data_formats[i] = obj_format;
