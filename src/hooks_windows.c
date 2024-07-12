@@ -93,7 +93,7 @@ static int add_device_object(LPCDIDEVICEOBJECTINSTANCE lpddoi, LPVOID pvRef) {
         // If we have handled an object with this offset before, don't process it again.
         if (dev_objs->elems[i].org_offset == lpddoi->dwOfs) return DIENUM_CONTINUE;
     }
-
+    
     NB_Device_Object_Info info = {0};
     info.type = dev_objs->type; // Set the type with which we are enumerating, we don't care about the exact type.
     info.org_offset = lpddoi->dwOfs; // The offset to check for duplicates against.
@@ -189,11 +189,15 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
         return DIENUM_CONTINUE;
     }
 
+    // Windows expects the total data size to be a multiple of 4.
+    int round_offset = dev_objs.data_size % 4;
+    if (round_offset > 0) dev_objs.data_size += (4 - round_offset);
+
     // Apparently we need to specify globally whether we want to set the axes in absolute mode, so if we found
     // one object that reports itself as an absolute axis, set this flag.
     DWORD device_flags = DIDF_RELAXIS;
     for (size_t i = 0; i < dev_objs.count; i++) {
-        if (dev_objs.elems[i].type == DIDF_ABSAXIS) {
+        if (dev_objs.elems[i].type == DIDFT_ABSAXIS) {
             device_flags = DIDF_ABSAXIS;
         }
     }
@@ -203,10 +207,11 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
     LPDIOBJECTDATAFORMAT data_formats = noh_arena_alloc(&hooks_arena, dev_objs.count * sizeof(DIOBJECTDATAFORMAT));
     for (size_t i = 0; i < dev_objs.count; i++) {
         NB_Device_Object_Info *obj_info = &dev_objs.elems[i];
+        DWORD type = (obj_info->type == 12) ? DIDFT_BUTTON : DIDFT_AXIS;
         DIOBJECTDATAFORMAT obj_format = {
             .pguid = 0,
             .dwOfs = obj_info->offset,
-            .dwType = DIDFT_MAKEINSTANCE(obj_info->instance),
+            .dwType = type | DIDFT_MAKEINSTANCE(obj_info->instance),
             .dwFlags = 0
         };
 
