@@ -69,6 +69,7 @@ typedef struct {
     GUID guid;
     LPDIRECTINPUTDEVICE instance;
     NB_Device_Object_Infos objects;
+    bool should_poll;
 #else
     int fd;
     char *path;

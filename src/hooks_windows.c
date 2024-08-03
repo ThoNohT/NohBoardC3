@@ -6,6 +6,14 @@ static Noh_Arena hooks_arena = {0};
 
 NB_Input_Devices hooks_devices = {0};
 
+NBI_Input_State input_state = {0};
+
+// All information needed for running the background input thread.
+bool running = false;
+DWORD thread_id;
+HANDLE input_thread;
+HANDLE input_mutex;
+
 // Return a helpful string representing the error result.
 char *print_dierr_hresult(HRESULT result) {
     switch (result) {
@@ -148,8 +156,9 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
 
     device.guid = instance->guidInstance;
     device.unique_id = guid_to_cstr(&hooks_arena, &instance->guidInstance);
-    device.name = noh_arena_sprintf(&hooks_arena, "%s: %s", instance->tszInstanceName, instance->tszProductName);
-
+    device.name = noh_arena_sprintf(&hooks_arena, "%s", instance->tszInstanceName);
+    // TODO: instance->tszProductName seems to always have the same
+    
     LPDIRECTINPUTDEVICE deviceInstance;
 
     // Create a device instance.
@@ -204,10 +213,16 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
 
     // Fill in data formats.
     noh_arena_save(&hooks_arena);
+    size_t num_axes = 0;
+    size_t num_buttons = 0;
     LPDIOBJECTDATAFORMAT data_formats = noh_arena_alloc(&hooks_arena, dev_objs.count * sizeof(DIOBJECTDATAFORMAT));
     for (size_t i = 0; i < dev_objs.count; i++) {
         NB_Device_Object_Info *obj_info = &dev_objs.elems[i];
         DWORD type = (obj_info->type == 12) ? DIDFT_BUTTON : DIDFT_AXIS;
+
+        if (type == DIDFT_AXIS) num_axes++;
+        if (type == DIDFT_BUTTON) num_buttons++;
+
         DIOBJECTDATAFORMAT obj_format = {
             .pguid = 0,
             .dwOfs = obj_info->offset,
@@ -235,6 +250,16 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
     }
     device.objects = dev_objs;
 
+    // Check if polling is necessary by checking the device capabilities.
+    struct DIDEVCAPS dev_caps = {0};
+    dev_caps.dwSize = sizeof(dev_caps);
+    result = IDirectInputDevice_GetCapabilities(deviceInstance, &dev_caps);
+    if (result != DI_OK) {
+        noh_log(NOH_WARNING, "Could not check capabilities of device %s: %s.", device.name, print_dierr_hresult(result));
+        return DIENUM_CONTINUE;
+    }
+    if ((dev_caps.dwFlags & DIDC_POLLEDDATAFORMAT) != 0) device.should_poll = true;
+
     // Acquire device.
     result = IDirectInputDevice_Acquire(deviceInstance);
     if (result != DI_OK) {
@@ -245,11 +270,25 @@ static int add_input_device(LPCDIDEVICEINSTANCE instance, LPVOID pvRef) {
     device.index = devices->count; // The current count will be the index of this device.
     noh_da_append(devices, device);
 
+    noh_log(NOH_INFO, "Added  %s with %zu axes and %zu buttons...", device.name, num_axes, num_buttons);
+
     return DIENUM_CONTINUE;
+}
+
+// The thread that runs processing input from DirectInput in the background.
+DWORD WINAPI run(LPVOID lpParam)
+{ 
+    (void)lpParam;
 }
 
 bool hooks_initialize() {
     noh_log(NOH_INFO, "Initializing hooks.");
+
+    input_mutex = CreateMutex(NULL, false, NULL);
+    if (input_mutex == NULL) {
+        noh_log(NOH_ERROR, "Could not create input mutex.");
+        return false;
+    }
 
     if (hooks_arena.blocks.count > 0) {
         noh_arena_reset(&hooks_arena);
@@ -273,8 +312,10 @@ bool hooks_initialize() {
         return false;
     }
 
-    // TODO *: Start checking device data in a loop.
+    // Fill in the NBI_Input_State data.
 
+    // Start checking device data in a loop.
+    //input_thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)run,  NULL, 0, &thread_id);
     return true;
 }
 
