@@ -16,6 +16,19 @@
                 "isDefault": true
             },
         },
+        {
+            "type": "shell",
+            "label": "Run using build.bat",
+            "command": "./build.bat",
+            
+            "args": [
+                "run"
+            ],
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": "none",
+        },
     ],
     "version": "2.0.0"
 }
